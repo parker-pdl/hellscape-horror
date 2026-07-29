@@ -301,6 +301,9 @@
   const flameT=flameTex();
   const steamT=steamTex();
   const dropTex=glowTex('rgba(150,10,16,1)');
+  // ornate box set into the far wall of each red room (placeholder door, static for now)
+  const doorBoxTex=new THREE.TextureLoader().load('./puzzle-box.png');
+  doorBoxTex.encoding=THREE.sRGBEncoding;
 
   function stoneMat(rep,tint){
     const m=stone.map.clone(); m.needsUpdate=true; m.repeat.set(rep[0],rep[1]);
@@ -387,6 +390,11 @@
   const pool=new THREE.Mesh(new THREE.CircleGeometry(2.4,32),lavaMat);pool.rotation.x=-Math.PI/2;pool.position.set(0,0.03,ZEND+4);g.add(pool);
   const poolLight=new THREE.PointLight(0xff5a1a,2.2,16,2);poolLight.position.set(0,1.2,ZEND+4);g.add(poolLight);
 
+  // blood splatter down the main hall — walls (skipping the open junction gap,
+  // which has no wall behind it to mount a decal on), floor, and ceiling
+  scatterBloodWalls(g, ZEND+6, 0, HW, H, 16, z => z>JZ-GAPH-1.5 && z<JZ+GAPH+1.5);
+  scatterBloodFloorCeil(g, ZEND+5, -1, HW, H, 12, 9);
+
   // ================================================================
   // WINGS — a generic straight segment builder (flat halls AND stairs)
   // heading indices: 0 = -Z (into hall A), 1 = +X, 2 = +Z, 3 = -X
@@ -447,6 +455,44 @@
     return mesh;
   }
 
+  // floor/ceiling blood pool — same random splatter texture, laid flat instead of
+  // mounted on a wall. A random z-spin keeps repeated pools from looking identical.
+  function addBloodPool(parent, lx, ly, lz, w, h, onCeiling){
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),
+      new THREE.MeshBasicMaterial({map:bloodTex(),transparent:true,depthWrite:false}));
+    mesh.position.set(lx,ly,lz);
+    mesh.rotation.x = onCeiling ? Math.PI/2 : -Math.PI/2;
+    mesh.rotation.z = Math.random()*Math.PI*2;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  // scatter n wall-mounted blood decals along a straight segment's local z-range.
+  // skipZ(z) can veto a z (e.g. across a junction gap with no wall behind it) —
+  // it re-rolls a few times rather than just leaving that decal out.
+  function scatterBloodWalls(parent, zFrom, zTo, halfWidth, height, n, skipZ){
+    for(let i=0;i<n;i++){
+      let z, tries=0;
+      do{ z=zFrom+Math.random()*(zTo-zFrom); tries++; } while(skipZ && skipZ(z) && tries<12);
+      if(skipZ && skipZ(z)) continue;
+      const s=Math.random()<0.5?-1:1;
+      const w=1.5+Math.random()*2.0, h=1.8+Math.random()*2.4;
+      addBloodDecal(parent, s*(halfWidth-0.02), height*(0.3+Math.random()*0.45), z, s>0?-Math.PI/2:Math.PI/2, w,h);
+    }
+  }
+  function scatterBloodFloorCeil(parent, zFrom, zTo, halfWidth, height, nFloor, nCeil){
+    for(let i=0;i<nFloor;i++){
+      const x=(Math.random()-.5)*halfWidth*1.7, z=zFrom+Math.random()*(zTo-zFrom);
+      const w=1.6+Math.random()*2.2, h=1.6+Math.random()*2.2;
+      addBloodPool(parent, x, 0.035, z, w, h, false);
+    }
+    for(let i=0;i<nCeil;i++){
+      const x=(Math.random()-.5)*halfWidth*1.7, z=zFrom+Math.random()*(zTo-zFrom);
+      const w=1.5+Math.random()*2.0, h=1.5+Math.random()*2.0;
+      addBloodPool(parent, x, height-0.035, z, w, h, true);
+    }
+  }
+
   function addPipeRun(parent, lengthZ, lx, ly, radius){
     const mat=new THREE.MeshStandardMaterial({color:0x3a3128,roughness:.5,metalness:.55});
     const pipe=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,lengthZ,10), mat);
@@ -490,6 +536,27 @@
   // just a solid tint so the room reads as "completely blank" per the brief.
   function redMat(rep, tint){
     return new THREE.MeshStandardMaterial({color: tint||0xb30000, roughness:.85, metalness:.05});
+  }
+
+  // seals off the far end of a red room with an ornate box set into the wall —
+  // a placeholder "door" for now (static), meant to later rise open. DoubleSide
+  // on both meshes so it's guaranteed visible regardless of which way the room
+  // is entered, since this is the true dead end of the level.
+  function addEndDoor(parent, len, halfWidth, height, tex){
+    const cap=new THREE.Mesh(new THREE.PlaneGeometry(halfWidth*2, height),
+      new THREE.MeshStandardMaterial({color:0x4a0000, roughness:.85, metalness:.05, side:THREE.DoubleSide}));
+    cap.rotation.y=Math.PI; cap.position.set(0, height/2, len-0.03);
+    parent.add(cap);
+    const doorW=Math.min(halfWidth*1.5, 3.4), doorH=doorW*(646/672);
+    const doorMat=new THREE.MeshStandardMaterial({map:tex, roughness:.45, metalness:.35,
+      emissive:0x2a1400, emissiveIntensity:.22, side:THREE.DoubleSide});
+    const door=new THREE.Mesh(new THREE.PlaneGeometry(doorW, doorH), doorMat);
+    door.rotation.y=Math.PI; door.position.set(0, height*0.48, len-0.08);
+    parent.add(door);
+    const gl=new THREE.PointLight(0xffaa44, 1.6, 11, 2);
+    gl.position.set(0, height*0.5, len-0.9);
+    parent.add(gl);
+    return door;
   }
 
   function addBloodDrips(parent, count, spanZ, halfWidth, ceilY){
@@ -542,12 +609,20 @@
   // (z offsets picked to clear the hanging chains rather than sit right behind one)
   addTorch(caveCorridorGrp, (CAVE_HW-1.0), 3.1, CAVE_LEN*0.25, 1);
   addTorch(caveHallGrp,      (CAVE_HW-1.0), 3.1, HALLC_LEN*0.55, 1);
+  // blood splatter through the cave wing too, same as everywhere else
+  scatterBloodWalls(caveCorridorGrp, 0, CAVE_LEN, CAVE_HW, CAVE_H, 6);
+  scatterBloodFloorCeil(caveCorridorGrp, 0, CAVE_LEN, CAVE_HW, CAVE_H, 4, 3);
+  scatterBloodWalls(caveStairGrp, 0, STAIR_LEN, CAVE_HW, CAVE_H, 3);
+  scatterBloodFloorCeil(caveStairGrp, 0, STAIR_LEN, CAVE_HW, CAVE_H, 2, 2);
+  scatterBloodWalls(caveHallGrp, 0, HALLC_LEN, CAVE_HW, CAVE_H, 6);
+  scatterBloodFloorCeil(caveHallGrp, 0, HALLC_LEN, CAVE_HW, CAVE_H, 4, 3);
 
   // --- cave wing continues past the hallway into a blank red room: solid red
   // floor/walls/ceiling, no texture, no props — just longer gray chains overhead ---
   const caveRedGrp = buildSegment({x:caveTurnX,y:STAIR_RISE,z:caveHallEndZ}, 0, REDC_LEN, 0, CAVE_HW, CAVE_H, redMat,
     {floor:0x7a0000,ceil:0x4a0000,wall:0xb30000});
   for(let i=1;i<=4;i++) addChain(caveRedGrp, (i%2?-1:1)*(CAVE_HW-1.1), i*(REDC_LEN/5), CAVE_H, 2.8+Math.random()*1.0, 0x9a9a9a);
+  addEndDoor(caveRedGrp, REDC_LEN, CAVE_HW, CAVE_H, doorBoxTex);
 
   // --- RIGHT WING: boiler room, pipes, blood ---
   const boilCorridorGrp = buildSegment({x:HW,y:0,z:JZ}, 1, BOIL_LEN, 0, BOIL_HW, BOIL_H, boilerMat,
@@ -589,11 +664,19 @@
   // an open wall torch in each boiler segment alongside the caged bulbs, for extra light
   addTorch(boilCorridorGrp, -(BOIL_HW-1.0), 3.2, BOIL_LEN*0.5, -1);
   addTorch(boilHallGrp,      (BOIL_HW-1.0), 3.2, HALLE_LEN*0.55, 1);
+  // a lot more blood on top of the hand-placed splashes above — walls, floor, ceiling
+  scatterBloodWalls(boilCorridorGrp, 0, BOIL_LEN, BOIL_HW, BOIL_H, 7);
+  scatterBloodFloorCeil(boilCorridorGrp, 0, BOIL_LEN, BOIL_HW, BOIL_H, 5, 4);
+  scatterBloodWalls(boilStairGrp, 0, STAIR_LEN, BOIL_HW, BOIL_H, 3);
+  scatterBloodFloorCeil(boilStairGrp, 0, STAIR_LEN, BOIL_HW, BOIL_H, 2, 2);
+  scatterBloodWalls(boilHallGrp, 0, HALLE_LEN, BOIL_HW, BOIL_H, 7);
+  scatterBloodFloorCeil(boilHallGrp, 0, HALLE_LEN, BOIL_HW, BOIL_H, 5, 4);
 
   // --- boiler wing continues past the hallway into a blank red room too ---
   const boilRedGrp = buildSegment({x:boilTurnX,y:-STAIR_RISE,z:boilHallEndZ}, 0, REDE_LEN, 0, BOIL_HW, BOIL_H, redMat,
     {floor:0x7a0000,ceil:0x4a0000,wall:0xb30000});
   for(let i=1;i<=4;i++) addChain(boilRedGrp, (i%2?-1:1)*(BOIL_HW-1.1), i*(REDE_LEN/5), BOIL_H, 2.8+Math.random()*1.0, 0x9a9a9a);
+  addEndDoor(boilRedGrp, REDE_LEN, BOIL_HW, BOIL_H, doorBoxTex);
 
   // ---------------- lights ----------------
   scene.add(new THREE.AmbientLight(0x241009,0.5));
