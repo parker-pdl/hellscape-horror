@@ -473,6 +473,19 @@
     steamSystems.push({geo,count,spanZ,halfWidth,ceilY});
   }
 
+  // mounted wall torch (bracket + flame sprite + flicker light) — matches the
+  // main-hall torches so it reads as the same fixture, just relit for the wings.
+  // side: -1 (left wall) or 1 (right wall); lx/ly/lz are the wall-mount point.
+  function addTorch(parent, lx, ly, lz, side, color){
+    color = color || 0xff7a30;
+    const bracket=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.08,0.5,6),new THREE.MeshStandardMaterial({color:0x120a06,roughness:.9}));
+    bracket.position.set(lx,ly,lz); bracket.rotation.z=side*0.5; parent.add(bracket);
+    const fl=new THREE.Sprite(new THREE.SpriteMaterial({map:flameT,color:0xffffff,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+    fl.position.set(lx-side*0.15,ly+0.35,lz); fl.scale.set(0.9,1.3,1); parent.add(fl);
+    const pl=new THREE.PointLight(color,2.0,15,2); pl.position.set(lx-side*0.15,ly+0.4,lz); parent.add(pl);
+    torchLights.push({pl,base:2.0}); flames.push({fl,base:1.15,y:ly+0.35});
+  }
+
   function addBloodDrips(parent, count, spanZ, halfWidth, ceilY){
     const pos=new Float32Array(count*3), vel=new Float32Array(count);
     for(let i=0;i<count;i++){ pos[i*3]=(Math.random()-.5)*halfWidth*1.6; pos[i*3+1]=ceilY*(0.5+Math.random()*0.5); pos[i*3+2]=Math.random()*spanZ; vel[i]=0.6+Math.random()*1.0; }
@@ -516,6 +529,10 @@
       grp.add(gl);
     }
   }
+  // a real wall torch in each cave segment for extra warm light against the cold rock glow
+  // (z offsets picked to clear the hanging chains rather than sit right behind one)
+  addTorch(caveCorridorGrp, (CAVE_HW-1.0), 3.1, CAVE_LEN*0.25, 1);
+  addTorch(caveHallGrp,      (CAVE_HW-1.0), 3.1, HALLC_LEN*0.55, 1);
 
   // --- RIGHT WING: boiler room, pipes, blood ---
   const boilCorridorGrp = buildSegment({x:HW,y:0,z:JZ}, 1, BOIL_LEN, 0, BOIL_HW, BOIL_H, boilerMat,
@@ -554,6 +571,9 @@
       torchLights.push({pl:bl,base:1.4});
     }
   }
+  // an open wall torch in each boiler segment alongside the caged bulbs, for extra light
+  addTorch(boilCorridorGrp, -(BOIL_HW-1.0), 3.2, BOIL_LEN*0.5, -1);
+  addTorch(boilHallGrp,      (BOIL_HW-1.0), 3.2, HALLE_LEN*0.55, 1);
 
   // ---------------- lights ----------------
   scene.add(new THREE.AmbientLight(0x241009,0.5));
@@ -599,7 +619,6 @@
     hudEl.textContent='the fire keeps the dark at bay'; hudEl.style.opacity=1;
     setTimeout(()=>{hudEl.style.opacity=0;},6000);
     try{canvas.requestPointerLock();}catch(e){}
-    Audio.start();
   }
   document.getElementById('enterBtn').addEventListener('click',start);
   document.getElementById('againBtn').addEventListener('click',()=>{
@@ -681,53 +700,10 @@
     return {x:cx,z:cz,y:0,zone:'hall'};
   }
 
-  // ---------------- audio (procedural, guarded) ----------------
-  const Audio=(function(){
-    let ctx,master,started=false,drone,crackTimer=0,dripTimer=0,hissTimer=0,groanTimer=0;
-    function start(){ if(started)return; try{
-      ctx=new (window.AudioContext||window.webkitAudioContext)(); master=ctx.createGain();master.gain.value=0.5;master.connect(ctx.destination);
-      // low drone
-      const o1=ctx.createOscillator(),o2=ctx.createOscillator(),dg=ctx.createGain();
-      o1.type='sine';o1.frequency.value=44;o2.type='sine';o2.frequency.value=55.3;dg.gain.value=0.12;
-      o1.connect(dg);o2.connect(dg);dg.connect(master);o1.start();o2.start();drone=dg;
-      // wind noise
-      const buf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);const dd=buf.getChannelData(0);
-      for(let i=0;i<dd.length;i++)dd[i]=Math.random()*2-1;
-      const ns=ctx.createBufferSource();ns.buffer=buf;ns.loop=true;const nf=ctx.createBiquadFilter();nf.type='lowpass';nf.frequency.value=280;
-      const ng=ctx.createGain();ng.gain.value=0.06;ns.connect(nf);nf.connect(ng);ng.connect(master);ns.start();
-      started=true;
-    }catch(e){} }
-    function crackle(){ if(!started)return; try{const t=ctx.currentTime;const o=ctx.createOscillator(),gn=ctx.createGain();
-      o.type='square';o.frequency.value=600+Math.random()*1400;gn.gain.setValueAtTime(0.0,t);gn.gain.linearRampToValueAtTime(0.05,t+0.005);
-      gn.gain.exponentialRampToValueAtTime(0.001,t+0.06);o.connect(gn);gn.connect(master);o.start(t);o.stop(t+0.07);}catch(e){} }
-    function roar(){ if(!started)return; try{const t=ctx.currentTime;const o=ctx.createOscillator(),gn=ctx.createGain(),f=ctx.createBiquadFilter();
-      f.type='lowpass';f.frequency.value=200;o.type='sawtooth';o.frequency.setValueAtTime(70,t);o.frequency.exponentialRampToValueAtTime(38,t+1.6);
-      gn.gain.setValueAtTime(0,t);gn.gain.linearRampToValueAtTime(0.16,t+0.4);gn.gain.exponentialRampToValueAtTime(0.001,t+2.0);
-      o.connect(f);f.connect(gn);gn.connect(master);o.start(t);o.stop(t+2.1);}catch(e){} }
-    function dripSound(){ if(!started)return; try{const t=ctx.currentTime;const o=ctx.createOscillator(),gn=ctx.createGain();
-      o.type='sine';o.frequency.setValueAtTime(900+Math.random()*500,t);o.frequency.exponentialRampToValueAtTime(220,t+0.09);
-      gn.gain.setValueAtTime(0.0,t);gn.gain.linearRampToValueAtTime(0.09,t+0.006);gn.gain.exponentialRampToValueAtTime(0.001,t+0.14);
-      o.connect(gn);gn.connect(master);o.start(t);o.stop(t+0.15);}catch(e){} }
-    function hiss(){ if(!started)return; try{const t=ctx.currentTime;
-      const buf=ctx.createBuffer(1,ctx.sampleRate*0.4,ctx.sampleRate);const dd=buf.getChannelData(0);
-      for(let i=0;i<dd.length;i++)dd[i]=Math.random()*2-1;
-      const src=ctx.createBufferSource();src.buffer=buf;const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=1800;
-      const gn=ctx.createGain();gn.gain.setValueAtTime(0,t);gn.gain.linearRampToValueAtTime(0.05,t+0.05);gn.gain.exponentialRampToValueAtTime(0.001,t+0.6);
-      src.connect(f);f.connect(gn);gn.connect(master);src.start(t);src.stop(t+0.65);}catch(e){} }
-    function groan(){ if(!started)return; try{const t=ctx.currentTime;const o=ctx.createOscillator(),gn=ctx.createGain(),f=ctx.createBiquadFilter();
-      f.type='lowpass';f.frequency.value=320;o.type='sawtooth';o.frequency.setValueAtTime(60+Math.random()*20,t);o.frequency.linearRampToValueAtTime(46,t+1.4);
-      gn.gain.setValueAtTime(0,t);gn.gain.linearRampToValueAtTime(0.07,t+0.3);gn.gain.exponentialRampToValueAtTime(0.001,t+1.8);
-      o.connect(f);f.connect(gn);gn.connect(master);o.start(t);o.stop(t+1.9);}catch(e){} }
-    function tick(dt,zone){ if(!started)return; crackTimer-=dt; if(crackTimer<=0){crackle();crackTimer=0.05+Math.random()*0.14;}
-      if(Math.random()<dt*0.06) roar();
-      if(zone==='cave'){ dripTimer-=dt; if(dripTimer<=0){dripSound();dripTimer=0.6+Math.random()*1.6;} }
-      if(zone==='boiler'){
-        hissTimer-=dt; if(hissTimer<=0){hiss();hissTimer=1.5+Math.random()*3.0;}
-        groanTimer-=dt; if(groanTimer<=0){groan();groanTimer=3.5+Math.random()*5.0;}
-      }
-    }
-    return {start,tick};
-  })();
+  // ---------------- audio ----------------
+  // Procedural Web Audio SFX (drone/wind/crackle/roar/drip/hiss/groan) removed —
+  // replaced by a single licensed background track (see the bgm <audio> element
+  // and its hookup script at the bottom of the file).
 
   // ---------------- loop ----------------
   const fwd=new THREE.Vector3(), fq=new THREE.Vector3();
@@ -763,7 +739,6 @@
       if(moving) bob+=dt*10*run;
       camera.position.set(player.x,player.elev+EYE+Math.sin(bob)*0.06,player.z);
       camera.rotation.set(player.pitch,player.yaw,0);
-      Audio.tick(dt,curZone);
     } else {
       camera.position.set(player.x,player.elev+EYE,player.z);
       camera.rotation.set(player.pitch,player.yaw,0);
@@ -824,8 +799,8 @@
 })();
 </script>
 <script>
-/* Background music hook — drop a royalty-free track named music.mp3 into the repo and it plays
-   (looping) the moment the player descends. Mute toggle top-right. Missing file fails silently. */
+/* Background music — music.mp3 plays (looping) the moment the player descends.
+   Mute toggle top-right. */
 (function(){
   var bgm=document.getElementById('bgm'), mute=document.getElementById('mute');
   if(!bgm||!mute)return;
