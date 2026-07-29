@@ -665,7 +665,13 @@
       return {x:cx,z:cz,y:0,zone:'boiler'};
     }
     // default: main hall A
-    const cx=Math.max(-HW+0.9,Math.min(HW-0.9,nx));
+    // near the junction the side walls have a gap (no inner wall there) so the
+    // player must be able to walk all the way out to the wall line — clamping
+    // to the usual -0.9 margin here would create an invisible wall exactly
+    // where the opening is and block the turn into either wing.
+    const inGapZ = nz>JZ-GAPH-0.5 && nz<JZ+GAPH+0.5;
+    const hx = inGapZ ? HW-0.1 : HW-0.9;
+    const cx=Math.max(-hx,Math.min(hx,nx));
     const cz=Math.max(ZEND+2.4,Math.min(3.2,nz));
     if(cz<JZ+GAPH+2 && cz>JZ-GAPH-2 && !hintShown.junction){ showHint('junction','THE HALL SPLITS — LEFT OR RIGHT'); }
     return {x:cx,z:cz,y:0,zone:'hall'};
