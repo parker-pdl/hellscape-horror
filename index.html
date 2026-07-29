@@ -67,7 +67,7 @@
 </head>
 <body>
 <canvas id="scene"></canvas>
-<audio id="bgm" loop preload="none" src="./music.mp3"></audio>
+<audio id="bgm" loop preload="none" src="./music.mp3?v=1"></audio>
 <button id="mute" class="off" title="Music on / off" aria-label="Toggle music">♪</button>
 <div id="grade"></div><div id="vig"></div><canvas id="grain"></canvas><div id="dmg"></div>
 <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
@@ -840,16 +840,32 @@
 (function(){
   var bgm=document.getElementById('bgm'), mute=document.getElementById('mute');
   if(!bgm||!mute)return;
-  var muted=true, wanted=false;           // start muted until user descends / toggles
+  var muted=true, wanted=false, blobReady=false, blobLoading=false;
+  var srcUrl = bgm.getAttribute('src') || './music.mp3';
+  // Pull the whole track down as a blob and play from that, instead of letting
+  // the <audio> element stream it directly. A direct src stream means the
+  // browser issues Range requests, and getting that wrong at the service-worker
+  // layer is exactly what silently broke playback before (see sw.js) — a blob
+  // URL sidesteps ranged/streamed fetching (and the SW) entirely, so this stays
+  // reliable even if the caching layer changes again later.
+  bgm.removeAttribute('src');
   bgm.volume=0.55;
-  function play(){ if(muted)return; var p=bgm.play(); if(p&&p.catch)p.catch(function(){}); }
-  function descend(){ wanted=true; if(muted){muted=false; mute.classList.remove('off');} play(); }
+  function reallyPlay(){ if(muted)return; var p=bgm.play(); if(p&&p.catch)p.catch(function(){}); }
+  function ensureBlobThenPlay(){
+    if(blobReady){ reallyPlay(); return; }
+    if(blobLoading) return;
+    blobLoading=true;
+    fetch(srcUrl).then(function(r){ return r.blob(); })
+      .then(function(b){ bgm.src=URL.createObjectURL(b); blobReady=true; blobLoading=false; if(wanted) reallyPlay(); })
+      .catch(function(){ blobLoading=false; });
+  }
+  function descend(){ wanted=true; if(muted){muted=false; mute.classList.remove('off');} ensureBlobThenPlay(); }
   var a=document.getElementById('enterBtn'), b=document.getElementById('againBtn');
   if(a)a.addEventListener('click',descend);
   if(b)b.addEventListener('click',descend);
   mute.addEventListener('click',function(){
     muted=!muted; mute.classList.toggle('off',muted);
-    if(muted){bgm.pause();} else {wanted=true; play();}
+    if(muted){bgm.pause();} else {wanted=true; ensureBlobThenPlay();}
   });
 })();
 </script>
