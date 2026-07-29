@@ -424,9 +424,9 @@
     return group;
   }
 
-  function addChain(parent, lx, lz, ceilingY, len){
+  function addChain(parent, lx, lz, ceilingY, len, color){
     const grp=new THREE.Group(); grp.position.set(lx,ceilingY,lz); parent.add(grp);
-    const linkMat=new THREE.MeshStandardMaterial({color:0x1c1a18,roughness:.6,metalness:.7});
+    const linkMat=new THREE.MeshStandardMaterial({color:color||0x1c1a18,roughness:.6,metalness:.7});
     const n=Math.max(4,Math.round(len/0.17));
     for(let i=0;i<n;i++){
       const link=new THREE.Mesh(new THREE.TorusGeometry(0.085,0.026,6,8),linkMat);
@@ -486,6 +486,12 @@
     torchLights.push({pl,base:2.0}); flames.push({fl,base:1.15,y:ly+0.35});
   }
 
+  // flat, unlit-detail red material for the blank red rooms — no texture map,
+  // just a solid tint so the room reads as "completely blank" per the brief.
+  function redMat(rep, tint){
+    return new THREE.MeshStandardMaterial({color: tint||0xb30000, roughness:.85, metalness:.05});
+  }
+
   function addBloodDrips(parent, count, spanZ, halfWidth, ceilY){
     const pos=new Float32Array(count*3), vel=new Float32Array(count);
     for(let i=0;i<count;i++){ pos[i*3]=(Math.random()-.5)*halfWidth*1.6; pos[i*3+1]=ceilY*(0.5+Math.random()*0.5); pos[i*3+2]=Math.random()*spanZ; vel[i]=0.6+Math.random()*1.0; }
@@ -500,13 +506,16 @@
   const BOIL_HW=4.2, BOIL_H=5.6, BOIL_LEN=26;
   const STAIR_LEN=12, STAIR_RISE=3.4;
   const HALLC_LEN=24, HALLE_LEN=24;
+  const REDC_LEN=20, REDE_LEN=20; // blank red rooms tacked onto the end of each wing
 
   const caveTurnX = -HW-CAVE_LEN;
   const boilTurnX =  HW+BOIL_LEN;
   const caveStairEndZ = JZ-STAIR_LEN;
   const caveHallEndZ  = caveStairEndZ-HALLC_LEN;
+  const caveRedEndZ   = caveHallEndZ-REDC_LEN;
   const boilStairEndZ = JZ-STAIR_LEN;
   const boilHallEndZ  = boilStairEndZ-HALLE_LEN;
+  const boilRedEndZ   = boilHallEndZ-REDE_LEN;
 
   // --- LEFT WING: cave, chains ---
   const caveCorridorGrp = buildSegment({x:-HW,y:0,z:JZ}, 3, CAVE_LEN, 0, CAVE_HW, CAVE_H, caveMat,
@@ -533,6 +542,12 @@
   // (z offsets picked to clear the hanging chains rather than sit right behind one)
   addTorch(caveCorridorGrp, (CAVE_HW-1.0), 3.1, CAVE_LEN*0.25, 1);
   addTorch(caveHallGrp,      (CAVE_HW-1.0), 3.1, HALLC_LEN*0.55, 1);
+
+  // --- cave wing continues past the hallway into a blank red room: solid red
+  // floor/walls/ceiling, no texture, no props — just longer gray chains overhead ---
+  const caveRedGrp = buildSegment({x:caveTurnX,y:STAIR_RISE,z:caveHallEndZ}, 0, REDC_LEN, 0, CAVE_HW, CAVE_H, redMat,
+    {floor:0x7a0000,ceil:0x4a0000,wall:0xb30000});
+  for(let i=1;i<=4;i++) addChain(caveRedGrp, (i%2?-1:1)*(CAVE_HW-1.1), i*(REDC_LEN/5), CAVE_H, 2.8+Math.random()*1.0, 0x9a9a9a);
 
   // --- RIGHT WING: boiler room, pipes, blood ---
   const boilCorridorGrp = buildSegment({x:HW,y:0,z:JZ}, 1, BOIL_LEN, 0, BOIL_HW, BOIL_H, boilerMat,
@@ -574,6 +589,11 @@
   // an open wall torch in each boiler segment alongside the caged bulbs, for extra light
   addTorch(boilCorridorGrp, -(BOIL_HW-1.0), 3.2, BOIL_LEN*0.5, -1);
   addTorch(boilHallGrp,      (BOIL_HW-1.0), 3.2, HALLE_LEN*0.55, 1);
+
+  // --- boiler wing continues past the hallway into a blank red room too ---
+  const boilRedGrp = buildSegment({x:boilTurnX,y:-STAIR_RISE,z:boilHallEndZ}, 0, REDE_LEN, 0, BOIL_HW, BOIL_H, redMat,
+    {floor:0x7a0000,ceil:0x4a0000,wall:0xb30000});
+  for(let i=1;i<=4;i++) addChain(boilRedGrp, (i%2?-1:1)*(BOIL_HW-1.1), i*(REDE_LEN/5), BOIL_H, 2.8+Math.random()*1.0, 0x9a9a9a);
 
   // ---------------- lights ----------------
   scene.add(new THREE.AmbientLight(0x241009,0.5));
@@ -649,10 +669,19 @@
       showHint('caveStairs','THE PASSAGE CLIMBS');
       return {x:cx,z:cz,y:frac*STAIR_RISE,zone:'cave'};
     }
-    // cave hallway C (far)
+    // cave hallway C (far) — no margin at its far end anymore, since the red
+    // room continues straight past it (margin there would wall off the doorway,
+    // same mistake as the junction dead-zone bug)
     if(inRect(nx,nz, caveTurnX-CAVE_HW, caveTurnX+CAVE_HW, caveHallEndZ, caveStairEndZ)){
       const cx=Math.max(caveTurnX-CAVE_HW+M,Math.min(caveTurnX+CAVE_HW-M,nx));
-      const cz=Math.max(caveHallEndZ+M,Math.min(caveStairEndZ,nz));
+      const cz=Math.max(caveHallEndZ,Math.min(caveStairEndZ,nz));
+      return {x:cx,z:cz,y:STAIR_RISE,zone:'cave'};
+    }
+    // cave red room (new dead end — margin only applies at its own far wall)
+    if(inRect(nx,nz, caveTurnX-CAVE_HW, caveTurnX+CAVE_HW, caveRedEndZ, caveHallEndZ)){
+      const cx=Math.max(caveTurnX-CAVE_HW+M,Math.min(caveTurnX+CAVE_HW-M,nx));
+      const cz=Math.max(caveRedEndZ+M,Math.min(caveHallEndZ,nz));
+      showHint('caveRed','A ROOM SOAKED IN RED');
       return {x:cx,z:cz,y:STAIR_RISE,zone:'cave'};
     }
     // cave corridor B
@@ -670,10 +699,17 @@
       showHint('boilStairs','THE PASSAGE DESCENDS');
       return {x:cx,z:cz,y:-frac*STAIR_RISE,zone:'boiler'};
     }
-    // boiler hallway E (far)
+    // boiler hallway E (far) — same open-doorway fix as the cave side
     if(inRect(nx,nz, boilTurnX-BOIL_HW, boilTurnX+BOIL_HW, boilHallEndZ, boilStairEndZ)){
       const cx=Math.max(boilTurnX-BOIL_HW+M,Math.min(boilTurnX+BOIL_HW-M,nx));
-      const cz=Math.max(boilHallEndZ+M,Math.min(boilStairEndZ,nz));
+      const cz=Math.max(boilHallEndZ,Math.min(boilStairEndZ,nz));
+      return {x:cx,z:cz,y:-STAIR_RISE,zone:'boiler'};
+    }
+    // boiler red room (new dead end)
+    if(inRect(nx,nz, boilTurnX-BOIL_HW, boilTurnX+BOIL_HW, boilRedEndZ, boilHallEndZ)){
+      const cx=Math.max(boilTurnX-BOIL_HW+M,Math.min(boilTurnX+BOIL_HW-M,nx));
+      const cz=Math.max(boilRedEndZ+M,Math.min(boilHallEndZ,nz));
+      showHint('boilRed','A ROOM SOAKED IN RED');
       return {x:cx,z:cz,y:-STAIR_RISE,zone:'boiler'};
     }
     // boiler corridor D
