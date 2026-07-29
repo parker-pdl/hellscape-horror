@@ -670,7 +670,11 @@
     // to the usual -0.9 margin here would create an invisible wall exactly
     // where the opening is and block the turn into either wing.
     const inGapZ = nz>JZ-GAPH-0.5 && nz<JZ+GAPH+0.5;
-    const hx = inGapZ ? HW-0.1 : HW-0.9;
+    // must reach past HW (the wing-corridor rects trigger at |x|>=HW) with
+    // room to spare — per-frame movement steps are small, so a margin that
+    // stops even slightly short of HW creates a dead zone the player can
+    // never step across, which is exactly what was still blocking the turn.
+    const hx = inGapZ ? HW+1.5 : HW-0.9;
     const cx=Math.max(-hx,Math.min(hx,nx));
     const cz=Math.max(ZEND+2.4,Math.min(3.2,nz));
     if(cz<JZ+GAPH+2 && cz>JZ-GAPH-2 && !hintShown.junction){ showHint('junction','THE HALL SPLITS — LEFT OR RIGHT'); }
