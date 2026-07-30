@@ -33,6 +33,7 @@
     background:radial-gradient(130% 100% at 50% 46%, rgba(0,0,0,0) 44%, rgba(0,0,0,.62) 100%)}
   #grain{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:.06;mix-blend-mode:overlay}
   #dmg{position:fixed;inset:0;z-index:5;pointer-events:none;background:radial-gradient(120% 120% at 50% 50%,rgba(120,0,0,0) 40%,rgba(150,0,0,.0) 100%);opacity:0;transition:opacity .5s}
+  #scareFlash{position:fixed;inset:0;z-index:9;pointer-events:none;background:#fff;opacity:0}
   .corner{position:fixed;width:30px;height:30px;border:2px solid rgba(255,120,50,.35);z-index:6;pointer-events:none}
   .tl{top:16px;left:16px;border-right:0;border-bottom:0}.tr{top:16px;right:16px;border-left:0;border-bottom:0}
   .bl{bottom:16px;left:16px;border-right:0;border-top:0}.br{bottom:16px;right:16px;border-left:0;border-top:0}
@@ -69,7 +70,7 @@
 <canvas id="scene"></canvas>
 <audio id="bgm" loop preload="none" src="./music.mp3?v=1"></audio>
 <button id="mute" class="off" title="Music on / off" aria-label="Toggle music">♪</button>
-<div id="grade"></div><div id="vig"></div><canvas id="grain"></canvas><div id="dmg"></div>
+<div id="grade"></div><div id="vig"></div><canvas id="grain"></canvas><div id="dmg"></div><div id="scareFlash"></div>
 <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
 <div id="obj"></div>
 <div id="hud"></div>
@@ -301,9 +302,41 @@
   const flameT=flameTex();
   const steamT=steamTex();
   const dropTex=glowTex('rgba(150,10,16,1)');
+  const waterDropTex=glowTex('rgba(70,190,170,1)'); // for the crypt's ceiling drips — same glow shape, teal instead of blood-red
   // ornate box set into the far wall of each red room (placeholder door, static for now)
   const doorBoxTex=new THREE.TextureLoader().load('./puzzle-box.png');
   doorBoxTex.encoding=THREE.sRGBEncoding;
+
+  // cracked floor texture — networked fissures + wear
+  function floorCrackTex(){
+    const size=512; const c=document.createElement('canvas'); c.width=c.height=size;
+    const x=c.getContext('2d'); x.fillStyle='rgba(0,0,0,0)'; x.fillRect(0,0,size,size);
+    // base pattern of deep cracks
+    x.strokeStyle='rgba(0,0,0,.35)'; x.lineWidth=2.8;
+    for(let i=0;i<18;i++){
+      let px=Math.random()*size, py=Math.random()*size;
+      x.beginPath(); x.moveTo(px,py);
+      for(let k=0;k<8;k++){
+        px+=(Math.random()-.5)*60; py+=(Math.random()-.5)*60; x.lineTo(px,py);
+      } x.stroke();
+    }
+    // branching fracture lines (smaller)
+    x.strokeStyle='rgba(0,0,0,.15)'; x.lineWidth=1.2;
+    for(let i=0;i<12;i++){
+      let px=Math.random()*size, py=Math.random()*size;
+      x.beginPath(); x.moveTo(px,py);
+      for(let k=0;k<6;k++){
+        px+=(Math.random()-.5)*45; py+=(Math.random()-.5)*45; x.lineTo(px,py);
+      } x.stroke();
+    }
+    // worn spots at crack junctions
+    x.fillStyle='rgba(0,0,0,.22)';
+    for(let i=0;i<24;i++){
+      const px=Math.random()*size, py=Math.random()*size, r=4+Math.random()*8;
+      x.beginPath(); x.arc(px,py,r,0,7); x.fill();
+    }
+    return new THREE.CanvasTexture(c);
+  }
 
   function stoneMat(rep,tint){
     const m=stone.map.clone(); m.needsUpdate=true; m.repeat.set(rep[0],rep[1]);
@@ -336,14 +369,26 @@
   // ---- junction: a gap opens in each side wall so the player can peel off left/right ----
   const JZ=-42.5;                // junction center z on hall A
   const GAPH=4.0;                 // half-length of each wall opening (matches wing corridor width)
+  // second junction, closer to the entrance, opens ONLY on the right wall —
+  // leads to the flooded crypt. Far enough from JZ (|JZ3-JZ|=22.5) that the
+  // two gaps and their pillar/wall carve-outs never overlap.
+  const JZ3=-20;
+  const GAPH3=4.0;
   function sideWallPiece(s,zTop,zBot){ // zTop must be > zBot
     const len=zTop-zBot; if(len<=0.02) return;
     const wmesh=new THREE.Mesh(new THREE.PlaneGeometry(len,H), stoneMat([len/5.8,2],0x5a4636));
     wmesh.rotation.y=s*Math.PI/2; wmesh.position.set(s*HW,H/2,(zTop+zBot)/2); wmesh.receiveShadow=true; wmesh.castShadow=true; g.add(wmesh);
   }
   for(const s of [-1,1]){
-    sideWallPiece(s, 2.5, JZ+GAPH);
-    sideWallPiece(s, JZ-GAPH, 2.5-LEN);
+    if(s===1){
+      // right wall: entrance -> crypt gap -> cave/boiler gap -> hall end
+      sideWallPiece(s, 2.5, JZ3+GAPH3);
+      sideWallPiece(s, JZ3-GAPH3, JZ+GAPH);
+      sideWallPiece(s, JZ-GAPH, 2.5-LEN);
+    } else {
+      sideWallPiece(s, 2.5, JZ+GAPH);
+      sideWallPiece(s, JZ-GAPH, 2.5-LEN);
+    }
   }
 
   // lava trench strips along the base of each wall (glow)
@@ -361,6 +406,7 @@
   for(let i=0;i<6;i++){
     const z=-2 - i*9;
     if(z>JZ-GAPH-1.2 && z<JZ+GAPH+1.2) continue; // keep the junction opening clear of pillars
+    if(z>JZ3-GAPH3-1.2 && z<JZ3+GAPH3+1.2) continue; // keep the crypt opening clear of pillars
     for(const s of [-1,1]){
       const col=new THREE.Mesh(new THREE.BoxGeometry(0.9,H,0.9),pillarMat);
       col.position.set(s*(HW-0.55),H/2,z); col.castShadow=true; col.receiveShadow=true; g.add(col);
@@ -403,6 +449,7 @@
   const chainGroups=[];
   const steamSystems=[];
   const dripSystems=[];
+  const cryptWaterMats=[]; // subtle opacity pulse animated in the render loop
 
   function buildSegment(origin,heading,run,rise,halfWidth,height,matFn,tints,opts){
     opts=opts||{};
@@ -538,6 +585,13 @@
     return new THREE.MeshStandardMaterial({color: tint||0xb30000, roughness:.85, metalness:.05});
   }
 
+  // dark, glassy obsidian material for the final chamber — low roughness +
+  // high metalness gives it a wet-looking sheen under the point lights
+  // without needing actual environment-map reflections.
+  function obsidianMat(rep, tint){
+    return new THREE.MeshStandardMaterial({color: tint||0x0d0410, roughness:.18, metalness:.72});
+  }
+
   // seals off the far end of a red room with an ornate box set into the wall —
   // a placeholder "door" for now (static), meant to later rise open. DoubleSide
   // on both meshes so it's guaranteed visible regardless of which way the room
@@ -559,14 +613,108 @@
     return door;
   }
 
-  function addBloodDrips(parent, count, spanZ, halfWidth, ceilY){
+  function addBloodDrips(parent, count, spanZ, halfWidth, ceilY, color, tex){
     const pos=new Float32Array(count*3), vel=new Float32Array(count);
     for(let i=0;i<count;i++){ pos[i*3]=(Math.random()-.5)*halfWidth*1.6; pos[i*3+1]=ceilY*(0.5+Math.random()*0.5); pos[i*3+2]=Math.random()*spanZ; vel[i]=0.6+Math.random()*1.0; }
     const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
-    const mat=new THREE.PointsMaterial({size:0.05,map:dropTex,color:0xa00810,transparent:true,opacity:.9,depthWrite:false});
+    const mat=new THREE.PointsMaterial({size:0.05,map:tex||dropTex,color:color||0xffffff,transparent:true,opacity:.9,depthWrite:false});
     const pts=new THREE.Points(geo,mat); parent.add(pts);
     dripSystems.push({geo,count,vel,ceilY,spanZ,halfWidth});
   }
+
+  // ---- obstacle generation ----
+  function addObstacle(parent, x, y, z, type, halfWidth){
+    const obstMat=new THREE.MeshStandardMaterial({color:0x3a2820,roughness:.8,metalness:.1});
+    let mesh;
+    if(type==='box'){
+      mesh=new THREE.Mesh(new THREE.BoxGeometry(1.2+Math.random()*0.8, 1.0+Math.random()*1.0, 0.9+Math.random()*0.6), obstMat);
+      mesh.position.set(x,y,z); mesh.rotation.z=Math.random()*Math.PI;
+      mesh.castShadow=true; mesh.receiveShadow=true; parent.add(mesh);
+    } else if(type==='debris'){
+      const w=0.6+Math.random()*0.8, h=0.3+Math.random()*0.5, d=0.5+Math.random()*0.7;
+      mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), obstMat);
+      mesh.position.set(x,y,z); mesh.rotation.z=Math.random()*Math.PI;
+      mesh.castShadow=true; mesh.receiveShadow=true; parent.add(mesh);
+    } else if(type==='barrel'){
+      mesh=new THREE.Mesh(new THREE.CylinderGeometry(0.38,0.4,1.2,8), obstMat);
+      mesh.position.set(x,y,z); mesh.rotation.z=Math.random()*Math.PI;
+      mesh.castShadow=true; mesh.receiveShadow=true; parent.add(mesh);
+    } else if(type==='coffin'){
+      // a mossy stone coffin resting on a low plinth — crypt-specific dressing
+      const grp=new THREE.Group(); grp.position.set(x,y,z); grp.rotation.y=Math.random()*Math.PI*2;
+      const plinthMat=new THREE.MeshStandardMaterial({color:0x2a2e26,roughness:.95,metalness:.03});
+      const lidMat=new THREE.MeshStandardMaterial({color:0x363c30,roughness:.9,metalness:.05});
+      const plinth=new THREE.Mesh(new THREE.BoxGeometry(2.1,0.3,0.9), plinthMat);
+      plinth.position.y=0.15; plinth.castShadow=true; plinth.receiveShadow=true; grp.add(plinth);
+      const lid=new THREE.Mesh(new THREE.BoxGeometry(1.9,0.35,0.8), lidMat);
+      lid.position.y=0.48; lid.castShadow=true; lid.receiveShadow=true; grp.add(lid);
+      parent.add(grp);
+    } else if(type==='spikes'){
+      // small cluster of dark floor spikes — paired with a 'spike' hazard zone
+      const grp=new THREE.Group(); grp.position.set(x,y,z);
+      const spikeMat=new THREE.MeshStandardMaterial({color:0x14100c,roughness:.6,metalness:.3});
+      for(let i=0;i<5;i++){
+        const sp=new THREE.Mesh(new THREE.ConeGeometry(0.09,0.55+Math.random()*0.3,6), spikeMat);
+        sp.position.set((Math.random()-.5)*0.7,0.28,(Math.random()-.5)*0.7);
+        sp.rotation.z=(Math.random()-.5)*0.15; sp.castShadow=true; grp.add(sp);
+      }
+      parent.add(grp);
+    }
+    return mesh;
+  }
+
+  // ---- hazard system — invisible trigger zones tied to visible obstacles.
+  // 'slow'  — player movement speed is reduced while inside (water, rubble).
+  // 'spike' — a brief pain flash + stinger sound on entry, with a cooldown
+  //           so it doesn't spam while the player lingers.
+  const hazards=[]; // {x,z,r,type,world:THREE.Group (for converting local->world), lastHit}
+  function addHazard(worldX, worldZ, r, type){
+    hazards.push({x:worldX, z:worldZ, r, type, lastHit:-999});
+  }
+  // helper: hazards are declared in a segment's LOCAL space at build time,
+  // but segments can be rotated/offset (stairs, turns) — so hazards must be
+  // registered with final WORLD coordinates. For our new wings (crypt is a
+  // flat, unrotated +X corridor; obsidian chamber is a flat, unrotated -Z
+  // continuation) local and world coordinates share a simple offset, so the
+  // call sites below just compute world coords directly rather than adding
+  // a full matrix-transform helper.
+
+  // shadow figure system — dark silhouettes with three behavior types:
+  //  'walker'  — patrols back and forth along a straight line in the distance
+  //  'watcher' — stands still, slowly turns to face the player when close
+  //  'stalker' — like walker, but the FIRST time the player gets close it
+  //              triggers a scripted jump scare (flash + stinger), once only
+  function createShadowFigure(x, z, dirX, dirZ, opts){
+    opts=opts||{};
+    const grp=new THREE.Group();
+    const shadowMat=new THREE.MeshBasicMaterial({color:0x0a0605});
+    const body=new THREE.Mesh(new THREE.BoxGeometry(0.6,2.2,0.4), shadowMat);
+    body.position.y=1.1; grp.add(body);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(0.35,8,8), shadowMat);
+    head.position.y=2.8; grp.add(head);
+    const armL=new THREE.Mesh(new THREE.BoxGeometry(0.25,1.4,0.2), shadowMat);
+    armL.position.set(-0.45,1.8,0); grp.add(armL);
+    const armR=new THREE.Mesh(new THREE.BoxGeometry(0.25,1.4,0.2), shadowMat);
+    armR.position.set(0.45,1.8,0); grp.add(armR);
+    const legL=new THREE.Mesh(new THREE.BoxGeometry(0.22,1.3,0.2), shadowMat);
+    legL.position.set(-0.22,0.55,0); grp.add(legL);
+    const legR=new THREE.Mesh(new THREE.BoxGeometry(0.22,1.3,0.2), shadowMat);
+    legR.position.set(0.22,0.55,0); grp.add(legR);
+
+    const dlen=Math.hypot(dirX,dirZ)||1;
+    return {
+      grp, armL, armR, legL, legR,
+      x, z, startX:x, startZ:z,
+      dirX:dirX/dlen, dirZ:dirZ/dlen,
+      patrolDist: opts.patrolDist!=null ? opts.patrolDist : 10,
+      speed: opts.speed || (0.8+Math.random()*0.4),
+      phase: Math.random()*Math.PI*2,
+      type: opts.type || 'walker',
+      traveled: 0, dir: 1, triggered:false, fadeUntilClose: !!opts.fadeUntilClose
+    };
+  }
+
+  const shadowFigures=[];
 
   // ---- wing constants ----
   const CAVE_HW=4.0, CAVE_H=5.4, CAVE_LEN=26;
@@ -574,9 +722,13 @@
   const STAIR_LEN=12, STAIR_RISE=3.4;
   const HALLC_LEN=24, HALLE_LEN=24;
   const REDC_LEN=20, REDE_LEN=20; // blank red rooms tacked onto the end of each wing
+  const CENTER_LEN=22; // new center corridor connecting the junction
+  const CRYPT_HW=3.6, CRYPT_H=5.0, CRYPT_LEN=22; // flooded crypt, off JZ3 on the right
+  const OBSID_HW=4.2, OBSID_H=6.6, OBSID_LEN=18; // obsidian chamber, continues past the center corridor
 
   const caveTurnX = -HW-CAVE_LEN;
   const boilTurnX =  HW+BOIL_LEN;
+  const cryptTurnX = HW+CRYPT_LEN;
   const caveStairEndZ = JZ-STAIR_LEN;
   const caveHallEndZ  = caveStairEndZ-HALLC_LEN;
   const caveRedEndZ   = caveHallEndZ-REDC_LEN;
@@ -616,6 +768,17 @@
   scatterBloodFloorCeil(caveStairGrp, 0, STAIR_LEN, CAVE_HW, CAVE_H, 2, 2);
   scatterBloodWalls(caveHallGrp, 0, HALLC_LEN, CAVE_HW, CAVE_H, 6);
   scatterBloodFloorCeil(caveHallGrp, 0, HALLC_LEN, CAVE_HW, CAVE_H, 4, 3);
+
+  // cave obstacles — collapsed chunks, hazards
+  for(let i=0;i<4;i++){
+    const obstZ=CAVE_LEN*(0.25+i*0.18);
+    addObstacle(caveCorridorGrp, (Math.random()-.5)*5.2, 0.4, obstZ, (i%2?'box':'debris'), CAVE_HW);
+  }
+  // cracked cave floor
+  const caveCrackFloor=new THREE.Mesh(new THREE.PlaneGeometry(CAVE_HW*2,CAVE_LEN),
+    new THREE.MeshBasicMaterial({map:floorCrackTex(), transparent:true, opacity:.25, depthWrite:false}));
+  caveCrackFloor.rotation.x=-Math.PI/2; caveCrackFloor.position.set(0,0.04,CAVE_LEN/2);
+  caveCorridorGrp.add(caveCrackFloor);
 
   // --- cave wing continues past the hallway into a blank red room: solid red
   // floor/walls/ceiling, no texture, no props — just longer gray chains overhead ---
@@ -672,11 +835,156 @@
   scatterBloodWalls(boilHallGrp, 0, HALLE_LEN, BOIL_HW, BOIL_H, 7);
   scatterBloodFloorCeil(boilHallGrp, 0, HALLE_LEN, BOIL_HW, BOIL_H, 5, 4);
 
+  // boiler obstacles — broken pipes, debris, fallen structures
+  for(let i=0;i<5;i++){
+    const obstZ=BOIL_LEN*(0.2+i*0.15);
+    const side=i%2?1:-1;
+    addObstacle(boilCorridorGrp, side*(2.2+Math.random()*0.8), 0.5, obstZ, (i%2?'box':'barrel'), BOIL_HW);
+  }
+  // more rubble scattered
+  for(let i=0;i<6;i++){
+    addObstacle(boilCorridorGrp, (Math.random()-.5)*6.0, 0.15, Math.random()*BOIL_LEN, 'debris', BOIL_HW);
+  }
+  // cracked boiler floor
+  const boilCrackFloor=new THREE.Mesh(new THREE.PlaneGeometry(BOIL_HW*2,BOIL_LEN),
+    new THREE.MeshBasicMaterial({map:floorCrackTex(), transparent:true, opacity:.3, depthWrite:false}));
+  boilCrackFloor.rotation.x=-Math.PI/2; boilCrackFloor.position.set(0,0.04,BOIL_LEN/2);
+  boilCorridorGrp.add(boilCrackFloor);
+
   // --- boiler wing continues past the hallway into a blank red room too ---
   const boilRedGrp = buildSegment({x:boilTurnX,y:-STAIR_RISE,z:boilHallEndZ}, 0, REDE_LEN, 0, BOIL_HW, BOIL_H, redMat,
     {floor:0x7a0000,ceil:0x4a0000,wall:0xb30000});
   for(let i=1;i<=4;i++) addChain(boilRedGrp, (i%2?-1:1)*(BOIL_HW-1.1), i*(REDE_LEN/5), BOIL_H, 2.8+Math.random()*1.0, 0x9a9a9a);
   addEndDoor(boilRedGrp, REDE_LEN, BOIL_HW, BOIL_H, doorBoxTex);
+
+  // ---- FLOODED CRYPT: branches off the main hall at JZ3, right side ----
+  const cryptGrp = buildSegment({x:HW,y:0,z:JZ3}, 1, CRYPT_LEN, 0, CRYPT_HW, CRYPT_H, stoneMat,
+    {floor:0x1e2a24,ceil:0x0e1512,wall:0x35453f});
+  // knee-deep water plane — translucent, sits just above the true floor
+  const cryptWaterMat=new THREE.MeshStandardMaterial({color:0x1a3a35,transparent:true,opacity:.55,roughness:.15,metalness:.15,depthWrite:false});
+  const cryptWater=new THREE.Mesh(new THREE.PlaneGeometry(CRYPT_HW*2-0.3,CRYPT_LEN-0.2),cryptWaterMat);
+  cryptWater.rotation.x=-Math.PI/2; cryptWater.position.set(0,0.16,CRYPT_LEN/2);
+  cryptGrp.add(cryptWater);
+  cryptWaterMats.push(cryptWaterMat);
+  // coffins scattered along the crypt as obstacles
+  for(let i=0;i<5;i++){
+    const cz=CRYPT_LEN*(0.12+i*0.18);
+    const cx=(i%2?1:-1)*(1.0+Math.random()*1.4);
+    addObstacle(cryptGrp, cx, 0.02, cz, 'coffin', CRYPT_HW);
+  }
+  // two spike-trap hazards along the flooded floor — visible warning (the
+  // spike clusters poke up through the water) paired with a 'spike' hazard
+  // zone at the same world coordinates
+  const cryptSpikeZs=[CRYPT_LEN*0.38, CRYPT_LEN*0.72];
+  for(const sz of cryptSpikeZs){
+    addObstacle(cryptGrp, 0, 0.02, sz, 'spikes', CRYPT_HW);
+    // world coords: heading 1 means local z -> world x (offset from HW), local x -> world z (offset from JZ3)
+    addHazard(HW+sz, JZ3, 0.9, 'spike');
+  }
+  // slow-moving water hazard across most of the corridor's floor
+  for(let i=0;i<4;i++){
+    addHazard(HW+CRYPT_LEN*(0.1+i*0.26), JZ3, 3.4, 'slow');
+  }
+  // dim, sickly green-blue lighting + steady ceiling drips (reuse steam/drip
+  // systems with crypt-appropriate colors)
+  for(let i=0;i<3;i++){
+    const gl=new THREE.PointLight(0x2a5a4a, 0.5, 9, 2);
+    gl.position.set((i%2?-1:1)*1.6, CRYPT_H-0.7, CRYPT_LEN*(i/2.5));
+    cryptGrp.add(gl);
+  }
+  addBloodDrips(cryptGrp, 45, CRYPT_LEN, CRYPT_HW, CRYPT_H, 0xffffff, waterDropTex);
+  addTorch(cryptGrp, (CRYPT_HW-1.0), 3.0, CRYPT_LEN*0.5, 1, 0x4aa88a);
+  scatterBloodWalls(cryptGrp, 0, CRYPT_LEN, CRYPT_HW, CRYPT_H, 5);
+  scatterBloodFloorCeil(cryptGrp, 0, CRYPT_LEN, CRYPT_HW, CRYPT_H, 0, 4);
+  addEndDoor(cryptGrp, CRYPT_LEN, CRYPT_HW, CRYPT_H, doorBoxTex);
+  // a watcher lurks among the coffins — stands still, slowly turns to face
+  // the player as they approach, never chases
+  shadowFigures.push(createShadowFigure(HW+CRYPT_LEN*0.8, JZ3+1.2, 1, 0, {type:'watcher'}));
+
+  // ---- CENTER CORRIDOR: a new passage descending from the junction ----
+  const centerCorrGrp = buildSegment({x:0,y:0,z:JZ}, 0, CENTER_LEN, -1.8, 3.2, 5.2, caveMat,
+    {floor:0x2a2820,ceil:0x141210,wall:0x252622});
+  // obstacles blocking the path — collapsed debris, hazards
+  for(let i=0;i<6;i++){
+    const obstZ=CENTER_LEN*(0.15+i*0.12);
+    const side=i%2?1:-1;
+    addObstacle(centerCorrGrp, side*(2.0+Math.random()), 0.5, obstZ, (i%3===0)?'box':'barrel', 3.2);
+  }
+  // scattered rubble on the floor
+  for(let i=0;i<8;i++){
+    addObstacle(centerCorrGrp, (Math.random()-.5)*5.2, 0.1, Math.random()*CENTER_LEN, 'debris', 3.2);
+  }
+  // cracked/broken floor overlay
+  const crackFloor=new THREE.Mesh(new THREE.PlaneGeometry(6.4,CENTER_LEN),
+    new THREE.MeshBasicMaterial({map:floorCrackTex(), transparent:true, opacity:.45, depthWrite:false}));
+  crackFloor.rotation.x=-Math.PI/2; crackFloor.position.set(0,0.04,CENTER_LEN/2);
+  centerCorrGrp.add(crackFloor);
+  // floor holes showing the abyss below (simple dark cutouts)
+  const holeMat=new THREE.MeshBasicMaterial({color:0x0a0605});
+  for(let i=0;i<3;i++){
+    const holeZ=CENTER_LEN*(0.15+i*0.32);
+    const hole=new THREE.Mesh(new THREE.CircleGeometry(0.8+Math.random()*0.6, 16), holeMat);
+    hole.rotation.x=-Math.PI/2; hole.position.set((Math.random()-.5)*4.0, 0.01, holeZ);
+    centerCorrGrp.add(hole);
+  }
+  // eerie lights and creeping shadows
+  for(let i=0;i<3;i++){
+    const gl=new THREE.PointLight(0x1a2a3a, 0.35, 8, 2);
+    gl.position.set((i%2?-1:1)*2.2, 4.2, CENTER_LEN*(0.2+i*0.35));
+    centerCorrGrp.add(gl);
+  }
+  // blood splatter throughout the center
+  scatterBloodWalls(centerCorrGrp, 0, CENTER_LEN, 3.2, 5.2, 8);
+  scatterBloodFloorCeil(centerCorrGrp, 0, CENTER_LEN, 3.2, 5.2, 6, 5);
+  const centerEndZ=JZ-CENTER_LEN; // world Z where the slope bottoms out, y=-1.8 there
+
+  // ---- OBSIDIAN CHAMBER: the climactic dead end, continuing straight past
+  // the bottom of the center corridor's descent ----
+  const obsidGrp = buildSegment({x:0,y:-1.8,z:centerEndZ}, 0, OBSID_LEN, 0, OBSID_HW, OBSID_H, obsidianMat,
+    {floor:0x0a0410, ceil:0x06020a, wall:0x140816});
+  // glassy floor gets its own faint reflection-style highlight strip
+  const obsidAccent=new THREE.Mesh(new THREE.PlaneGeometry(1.2,OBSID_LEN),
+    new THREE.MeshBasicMaterial({color:0x7a1a5a,transparent:true,opacity:.18,depthWrite:false}));
+  obsidAccent.rotation.x=-Math.PI/2; obsidAccent.position.set(0,0.02,OBSID_LEN/2);
+  obsidGrp.add(obsidAccent);
+  for(let i=0;i<4;i++){
+    const pl=new THREE.PointLight(0xaa2a7a, 1.1, 12, 2);
+    pl.position.set((i%2?-1:1)*2.4, OBSID_H-1.2, OBSID_LEN*(i/4.5)+2);
+    obsidGrp.add(pl);
+  }
+  // a few jagged obsidian shard obstacles jutting from the floor
+  for(let i=0;i<4;i++){
+    addObstacle(obsidGrp, (Math.random()-.5)*6.0, 0.3, OBSID_LEN*(0.15+i*0.2), 'box', OBSID_HW);
+  }
+  scatterBloodWalls(obsidGrp, 0, OBSID_LEN, OBSID_HW, OBSID_H, 6);
+  scatterBloodFloorCeil(obsidGrp, 0, OBSID_LEN, OBSID_HW, OBSID_H, 3, 3);
+  // sealed with glowing red seams rather than the puzzle-box door motif used
+  // elsewhere — this is the true end of the level, not another side-room
+  const obsidCap=new THREE.Mesh(new THREE.PlaneGeometry(OBSID_HW*2,OBSID_H),
+    new THREE.MeshStandardMaterial({color:0x100210,roughness:.6,metalness:.6,side:THREE.DoubleSide}));
+  obsidCap.rotation.y=Math.PI; obsidCap.position.set(0,OBSID_H/2,OBSID_LEN-0.03);
+  obsidGrp.add(obsidCap);
+  const obsidSeamMat=new THREE.MeshBasicMaterial({color:0xff2a8a,transparent:true,blending:THREE.AdditiveBlending});
+  const obsidSeams=[];
+  for(let k=-2;k<=2;k++){
+    const seam=new THREE.Mesh(new THREE.PlaneGeometry(0.05,OBSID_H-0.6),obsidSeamMat);
+    seam.position.set(k*1.4,OBSID_H/2,OBSID_LEN-0.1); obsidGrp.add(seam); obsidSeams.push(seam);
+  }
+  const obsidGlow=new THREE.PointLight(0xff2a8a,2.6,18,2);
+  obsidGlow.position.set(0,OBSID_H*0.5,OBSID_LEN-1.5); obsidGrp.add(obsidGlow);
+
+  // shadow figures patrol the far depths — cave and boiler each get a
+  // patrolling walker positioned in their ACTUAL red-room world coordinates
+  // (the previous build hardcoded a small x-offset near world x=0 for every
+  // figure regardless of which wing it belonged to, so they weren't really
+  // standing where the red rooms are — fixed here by computing real world
+  // positions per wing).
+  shadowFigures.push(createShadowFigure(caveTurnX, caveRedEndZ+6, 0, -1, {type:'walker', patrolDist:6, speed:0.7}));
+  shadowFigures.push(createShadowFigure(boilTurnX, boilRedEndZ+5, 0, -1, {type:'walker', patrolDist:5, speed:0.9}));
+  // a stalker waits at the far end of the obsidian chamber — first time the
+  // player gets close, it triggers the scripted jump scare
+  shadowFigures.push(createShadowFigure(0, centerEndZ-(OBSID_LEN-3), 0, -1, {type:'stalker', patrolDist:0, speed:0}));
+  for(const sf of shadowFigures) g.add(sf.grp);
 
   // ---------------- lights ----------------
   scene.add(new THREE.AmbientLight(0x241009,0.5));
@@ -743,7 +1051,31 @@
   // ---------------- movement / collision across the branching wings ----------------
   function inRect(x,z,x0,x1,z0,z1){ return x>=Math.min(x0,x1)&&x<=Math.max(x0,x1)&&z>=Math.min(z0,z1)&&z<=Math.max(z0,z1); }
   const M=0.7; // wall clearance margin for wing corridors
+  const centerHW=3.2;
+  const obsidEndZ=centerEndZ-OBSID_LEN;
   function resolvePosition(nx,nz){
+    // obsidian chamber (flat continuation past the bottom of the center descent)
+    if(inRect(nx,nz, -OBSID_HW, OBSID_HW, obsidEndZ, centerEndZ)){
+      const cx=Math.max(-OBSID_HW+M, Math.min(OBSID_HW-M, nx));
+      const cz=Math.max(obsidEndZ+M, Math.min(centerEndZ, nz));
+      showHint('obsidian','THE STONE HERE DRINKS THE LIGHT');
+      return {x:cx, z:cz, y:-1.8, zone:'obsidian'};
+    }
+    // center corridor (new descending passage from junction)
+    if(inRect(nx,nz, -centerHW, centerHW, centerEndZ, JZ)){
+      const cx=Math.max(-centerHW+M, Math.min(centerHW-M, nx));
+      const cz=Math.max(centerEndZ, Math.min(JZ, nz));
+      const frac=(JZ-cz)/CENTER_LEN;
+      showHint('center','A DARK PATH DESCENDS');
+      return {x:cx, z:cz, y:-frac*1.8, zone:'center'};
+    }
+    // flooded crypt (branches off JZ3, right side)
+    if(inRect(nx,nz, HW, cryptTurnX, JZ3-CRYPT_HW, JZ3+CRYPT_HW)){
+      const cx=Math.max(HW,Math.min(cryptTurnX-M,nx));
+      const cz=Math.max(JZ3-CRYPT_HW+M,Math.min(JZ3+CRYPT_HW-M,nz));
+      showHint('crypt','COLD WATER CLOSES AROUND YOUR ANKLES');
+      return {x:cx,z:cz,y:0,zone:'crypt'};
+    }
     // cave stairs (up)
     if(inRect(nx,nz, caveTurnX-CAVE_HW, caveTurnX+CAVE_HW, caveStairEndZ, JZ)){
       const cx=Math.max(caveTurnX-CAVE_HW+M,Math.min(caveTurnX+CAVE_HW-M,nx));
@@ -820,9 +1152,52 @@
   }
 
   // ---------------- audio ----------------
-  // Procedural Web Audio SFX (drone/wind/crackle/roar/drip/hiss/groan) removed —
-  // replaced by a single licensed background track (see the bgm <audio> element
-  // and its hookup script at the bottom of the file).
+  // Procedural Web Audio SFX for scary moments (dissonant tones, disturbing pitch bends)
+  function scareSound(ctx, freq, duration, type){
+    if(!ctx)return;
+    const now=ctx.currentTime;
+    const osc=ctx.createOscillator(), gain=ctx.createGain();
+    osc.type=type||'sine'; osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.exponentialRampToValueAtTime(freq*0.4, now+duration*0.7);
+    gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.08, now+0.05);
+    gain.gain.linearRampToValueAtTime(0, now+duration);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now+duration);
+  }
+  function dissonantDrone(ctx, dur){
+    if(!ctx)return;
+    const now=ctx.currentTime;
+    for(const f of [95, 142, 213]){
+      const osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.type='sawtooth'; osc.frequency.setValueAtTime(f, now);
+      gain.gain.setValueAtTime(0.03, now); gain.gain.linearRampToValueAtTime(0, now+dur);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(now); osc.stop(now+dur);
+    }
+  }
+  try{ var audioCtx=new(window.AudioContext||window.webkitAudioContext)(); } catch(e){ var audioCtx=null; }
+  let lastScareTime=0;
+  const scareSoundCooldown=0.6; // min time between scare sounds
+  let shadowEncounterTime=0;
+
+  // ---- scripted jump scare: a bright flash overlay + a loud dissonant
+  // stinger, fired once by the obsidian-chamber stalker figure ----
+  let jumpScareFlash=0;
+  const scareFlashEl=document.getElementById('scareFlash');
+  function triggerJumpScare(){
+    jumpScareFlash=1.0;
+    if(scareFlashEl) scareFlashEl.style.opacity=1;
+    if(audioCtx){
+      const now=audioCtx.currentTime;
+      for(const f of [55,80,160,240]){
+        const o=audioCtx.createOscillator(), gn=audioCtx.createGain();
+        o.type='sawtooth'; o.frequency.setValueAtTime(f, now);
+        gn.gain.setValueAtTime(0.2, now); gn.gain.exponentialRampToValueAtTime(0.001, now+0.55);
+        o.connect(gn); gn.connect(audioCtx.destination); o.start(now); o.stop(now+0.55);
+      }
+    }
+    lastScareTime=clock?clock.elapsedTime:0;
+  }
 
   // ---------------- loop ----------------
   const fwd=new THREE.Vector3(), fq=new THREE.Vector3();
@@ -841,7 +1216,22 @@
 
     if(mode==='play'){
       const run=(keys['shift'])?1.8:1.0;
-      const sp=3.2*run*dt;
+      // hazards: a 'slow' zone (water, rubble) drags movement speed down
+      // while standing in it; a 'spike' zone stings on entry with a
+      // cooldown so it doesn't spam while the player lingers nearby.
+      let hazardSpeedMul=1.0;
+      for(const hz of hazards){
+        const d=Math.hypot(player.x-hz.x, player.z-hz.z);
+        if(d>hz.r) continue;
+        if(hz.type==='slow'){ hazardSpeedMul=Math.min(hazardSpeedMul,0.5); }
+        else if(hz.type==='spike' && t-hz.lastHit>1.4){
+          hz.lastHit=t; window.__hazardHitCount=(window.__hazardHitCount||0)+1;
+          const dmgEl=document.getElementById('dmg');
+          dmgEl.style.opacity=1; setTimeout(()=>{dmgEl.style.opacity=0;},220);
+          if(audioCtx) scareSound(audioCtx, 340, 0.22, 'square');
+        }
+      }
+      const sp=3.2*run*hazardSpeedMul*dt;
       let mx=0,mz=0;
       if(keys['w']||keys['arrowup'])mz+=1; if(keys['s']||keys['arrowdown'])mz-=1;
       if(keys['a']||keys['arrowleft'])mx-=1; if(keys['d']||keys['arrowright'])mx+=1;
@@ -908,13 +1298,96 @@
     for(let i=0;i<EN;i++){ea[i*3+1]+=ev[i]*dt; ea[i*3]+=Math.sin(t*1.5+i)*dt*0.15; if(ea[i*3+1]>H){ea[i*3+1]=0;ea[i*3]=(Math.random()-.5)*HW*2;ea[i*3+2]=2.5-Math.random()*LEN;}}
     egeo.attributes.position.needsUpdate=true;
 
+    // shadow figure animation — behavior depends on type:
+    //  walker  — patrols back and forth along its assigned line
+    //  watcher — stands still, slowly turns to face an approaching player
+    //  stalker — stands still until the player is close, then fires once
+    for(const sf of shadowFigures){
+      if(sf.type==='watcher'){
+        const dist0=Math.hypot(player.x-sf.x, player.z-sf.z);
+        if(dist0<11){
+          const targetAngle=Math.atan2(player.x-sf.x, player.z-sf.z);
+          let da=targetAngle-sf.grp.rotation.y;
+          da=Math.atan2(Math.sin(da),Math.cos(da)); // shortest-path angle wrap
+          sf.grp.rotation.y+=da*Math.min(1,dt*2.2);
+        }
+        sf.grp.position.set(sf.x,2.5,sf.z);
+        sf.armL.rotation.x=Math.sin(t*1.1+sf.phase)*0.05;
+        sf.armR.rotation.x=Math.sin(t*1.0+sf.phase)*0.05;
+        sf.legL.rotation.x=0; sf.legR.rotation.x=0;
+      } else {
+        // walker / stalker: patrol back and forth along the dir vector
+        // (stalker has patrolDist 0, so it just stays put until triggered)
+        if(sf.patrolDist>0){
+          sf.traveled+=sf.dir*sf.speed*dt;
+          if(sf.traveled>sf.patrolDist){ sf.traveled=sf.patrolDist; sf.dir=-1; }
+          if(sf.traveled<0){ sf.traveled=0; sf.dir=1; }
+          sf.x=sf.startX+sf.dirX*sf.traveled;
+          sf.z=sf.startZ+sf.dirZ*sf.traveled;
+          sf.grp.rotation.y=Math.atan2(sf.dirX*sf.dir, sf.dirZ*sf.dir);
+          const armSwing=Math.sin(t*6+sf.phase)*0.35;
+          const legSwing=Math.sin(t*5.5+sf.phase)*0.4;
+          sf.armL.rotation.x=-0.3+armSwing; sf.armR.rotation.x=-0.3-armSwing;
+          sf.legL.rotation.x=-legSwing; sf.legR.rotation.x=legSwing;
+        } else {
+          sf.armL.rotation.x=Math.sin(t*0.8+sf.phase)*0.04;
+          sf.armR.rotation.x=Math.sin(t*0.7+sf.phase)*0.04;
+        }
+        sf.grp.position.set(sf.x,2.5,sf.z);
+      }
+
+      // proximity: dissonant drone for anyone standing near, once per cooldown
+      const dist=Math.hypot(player.x-sf.x, player.z-sf.z);
+      if(dist<4.5 && t-lastScareTime>scareSoundCooldown){
+        if(audioCtx) dissonantDrone(audioCtx, 0.4);
+        lastScareTime=t; shadowEncounterTime=t;
+      }
+      // stalker jump scare — fires once, the first time the player closes in
+      if(sf.type==='stalker' && !sf.triggered && dist<7.5){
+        sf.triggered=true;
+        triggerJumpScare();
+      }
+    }
+
+    // jump-scare screen flash decay
+    if(jumpScareFlash>0){
+      jumpScareFlash=Math.max(0,jumpScareFlash-dt*1.8);
+      scareFlashEl.style.opacity=jumpScareFlash;
+    }
+
+    // crypt water — subtle opacity pulse so it reads as unsettled/alive
+    for(const wm of cryptWaterMats){ wm.opacity=0.5+Math.sin(t*0.8)*0.08; }
+    // obsidian chamber seams pulse like the main gate's
+    for(const sm of obsidSeams){ sm.material.opacity=0.55+Math.sin(t*3.4)*0.3; }
+    obsidGlow.intensity=2.4+Math.sin(t*2.6)*0.6;
+
+    // occasional unsettling ambient sounds in deep zones
+    if(curZone==='boiler' && player.elev<-1.0 && t-lastScareTime>2.0 && Math.random()<0.005){
+      if(audioCtx) scareSound(audioCtx, 65+Math.random()*45, 0.3, 'triangle');
+      lastScareTime=t;
+    }
+    // creepy whispers in center corridor
+    if(curZone==='center' && t-lastScareTime>3.0 && Math.random()<0.004){
+      if(audioCtx){
+        for(let i=0;i<2;i++) scareSound(audioCtx, 200+Math.random()*150, 0.35, 'square');
+      }
+      lastScareTime=t;
+    }
+    // dripping unease in the flooded crypt
+    if(curZone==='crypt' && t-lastScareTime>2.5 && Math.random()<0.006){
+      if(audioCtx) scareSound(audioCtx, 500+Math.random()*300, 0.15, 'sine');
+      lastScareTime=t;
+    }
+
     if((gframe++&1)===0) drawGrain();
     renderer.render(scene,camera);
   }
 
   // reveal after first render
   requestAnimationFrame(()=>{ animate(); setTimeout(()=>{loadwrap.style.opacity=0;setTimeout(()=>loadwrap.style.display='none',600);},250); });
-  window.__HELL={start:()=>start(), dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}}};
+  window.__HELL={start:()=>start(), dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}},
+    state:()=>({x:player.x,z:player.z,elev:player.elev,zone:curZone,mode:mode}),
+    teleport:(x,z)=>{player.x=x;player.z=z;}};
 })();
 </script>
 <script>
