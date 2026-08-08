@@ -123,7 +123,7 @@
   <div class="title flicker">HELL<span class="b">SCAPE</span> HORROR</div>
   <div class="sub">D E S C E N D   I F   Y O U   D A R E</div>
   <button class="enter" id="enterBtn">▾ DESCEND ▾</button>
-  <div class="ctrls">W A S D / ARROWS — MOVE&nbsp;&nbsp;·&nbsp;&nbsp;MOUSE — LOOK&nbsp;&nbsp;·&nbsp;&nbsp;SHIFT — RUN&nbsp;&nbsp;·&nbsp;&nbsp;ESC — RELEASE CURSOR</div>
+  <div class="ctrls">W A S D — MOVE&nbsp;&nbsp;·&nbsp;&nbsp;LEFT / RIGHT ARROWS — TURN&nbsp;&nbsp;·&nbsp;&nbsp;UP / DOWN ARROWS — MOVE&nbsp;&nbsp;·&nbsp;&nbsp;SHIFT — RUN&nbsp;&nbsp;·&nbsp;&nbsp;ESC — PAUSE</div>
 </div>
 <div id="endscreen" class="screen hidden">
   <div class="title" id="endtitle" style="font-size:min(9vw,64px)">THE GATE</div>
@@ -1181,41 +1181,30 @@
   const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0) || (navigator.msMaxTouchPoints>0);
   let mouseSens=1;
   const keys={};
-  addEventListener('keydown',e=>{ keys[e.key.toLowerCase()]=true; if(e.key===' '&&mode==='play') e.preventDefault(); });
+  const TURN_KEYS=['arrowleft','arrowright'];
+  addEventListener('keydown',e=>{
+    keys[e.key.toLowerCase()]=true;
+    if(e.key===' '&&mode==='play') e.preventDefault();
+    if(TURN_KEYS.includes(e.key.toLowerCase())) e.preventDefault(); // don't let the page scroll
+    // Escape/pause: a direct, unconditional keydown handler. This does NOT
+    // depend on pointer lock at all (turning no longer needs pointer lock,
+    // and touch devices never have it), so Esc always works. openPause()/
+    // resumeGame() each guard on `mode` (only open from 'play', only
+    // resume from 'paused'), so if pointerlockchange also fires for the
+    // same Esc press it's just a harmless no-op, never a double-toggle.
+    if(e.key==='Escape'){
+      if(mode==='play') openPause();
+      else if(mode==='paused') resumeGame();
+    }
+  });
   addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
   let locked=false;
-  // Escape/pause: the ONE mechanism for opening the pause menu on desktop is
-  // the native pointer-lock-exit event — pressing Esc while locked always
-  // exits pointer lock on its own, so listening here (rather than also
-  // adding a separate keydown Escape handler) avoids any risk of the pause
-  // menu opening twice from a single Esc press.
   document.addEventListener('pointerlockchange',()=>{
     locked=(document.pointerLockElement===canvas);
-    if(!locked && mode==='play' && !isTouch) openPause();
   });
   addEventListener('mousemove',e=>{ if(!locked||mode!=='play')return;
     player.yaw-=e.movementX*0.0022*mouseSens; player.pitch-=e.movementY*0.0022*mouseSens;
     player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch)); });
-
-  // Click-and-drag mouse look — a reliable fallback that works even when
-  // pointer lock isn't available/granted (some browsers/touch-capable
-  // laptops silently block or skip it). Left mouse button held + drag turns
-  // the view, independent of pointer-lock state or touch detection, so
-  // there's always a way to look around with a mouse.
-  let mouseLookActive=false, mlLastX=0, mlLastY=0;
-  addEventListener('mousedown',e=>{
-    if(mode!=='play'||locked||e.button!==0)return;
-    mouseLookActive=true; mlLastX=e.clientX; mlLastY=e.clientY;
-  });
-  addEventListener('mousemove',e=>{
-    if(!mouseLookActive||locked||mode!=='play')return;
-    const dx=e.clientX-mlLastX, dy=e.clientY-mlLastY;
-    mlLastX=e.clientX; mlLastY=e.clientY;
-    player.yaw-=dx*0.0028*mouseSens; player.pitch-=dy*0.0028*mouseSens;
-    player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch));
-  });
-  addEventListener('mouseup',()=>{ mouseLookActive=false; });
-  addEventListener('mouseleave',()=>{ mouseLookActive=false; });
 
   let mode='intro';
   const introEl=document.getElementById('intro'), endEl=document.getElementById('endscreen');
@@ -1466,17 +1455,26 @@
       }
     }
     // default: main hall A
-    // near the junction the side walls have a gap (no inner wall there) so the
+    // near a junction the side wall has a gap (no inner wall there) so the
     // player must be able to walk all the way out to the wall line — clamping
     // to the usual -0.9 margin here would create an invisible wall exactly
-    // where the opening is and block the turn into either wing.
-    const inGapZ = nz>JZ-GAPH-0.5 && nz<JZ+GAPH+0.5;
+    // where the opening is and block the turn into the wing. There are two
+    // junctions on this hall: JZ (both walls open, cave-left/boiler-right)
+    // and JZ3 (right wall ONLY — the flooded crypt branch, the very first
+    // right-hand hallway near the start). The crypt zone's rect starts
+    // exactly at x=HW, so without widening the clamp near JZ3 too, the
+    // player could never actually reach x=HW there and would be pushed back
+    // by this same "solid wall" default — that was the bug blocking the
+    // first right-hand hallway.
+    const inGapZmain = nz>JZ-GAPH-0.5 && nz<JZ+GAPH+0.5;   // both walls open
+    const inGapZ3 = nz>JZ3-GAPH3-0.5 && nz<JZ3+GAPH3+0.5;  // right wall only
     // must reach past HW (the wing-corridor rects trigger at |x|>=HW) with
     // room to spare — per-frame movement steps are small, so a margin that
     // stops even slightly short of HW creates a dead zone the player can
     // never step across, which is exactly what was still blocking the turn.
-    const hx = inGapZ ? HW+1.5 : HW-0.9;
-    const cx=Math.max(-hx,Math.min(hx,nx));
+    const hxPos = (inGapZmain||inGapZ3) ? HW+1.5 : HW-0.9; // right side: open at JZ and JZ3
+    const hxNeg = inGapZmain ? HW+1.5 : HW-0.9;             // left side: open at JZ only
+    const cx=Math.max(-hxNeg,Math.min(hxPos,nx));
     const cz=Math.max(ZEND+2.4,Math.min(3.2,nz));
     if(cz<JZ+GAPH+2 && cz>JZ-GAPH-2 && !hintShown.junction){ showHint('junction','THE HALL SPLITS — LEFT OR RIGHT'); }
     return {x:cx,z:cz,y:0,zone:'hall'};
@@ -1537,6 +1535,15 @@
     const dt=Math.min(0.05,clock.getDelta()), t=clock.elapsedTime;
 
     if(mode==='play'){
+      // Left/right arrow keys turn the view directly — always on, every
+      // frame, regardless of touch detection, pointer-lock state, or mouse
+      // activity. This is the primary/reliable turn method Parker asked
+      // for; mouse-look (when pointer lock is granted) still works too but
+      // arrow-key turning never depends on it.
+      const TURN_RATE=2.0; // radians/sec
+      if(keys['arrowleft']) player.yaw+=TURN_RATE*dt;
+      if(keys['arrowright']) player.yaw-=TURN_RATE*dt;
+
       const run=(keys['shift'])?1.8:1.0;
       // hazards: a 'slow' zone (water, rubble) drags movement speed down
       // while standing in it; a 'spike' zone stings on entry with a
@@ -1556,7 +1563,7 @@
       const sp=3.2*run*hazardSpeedMul*dt;
       let mx=0,mz=0;
       if(keys['w']||keys['arrowup'])mz+=1; if(keys['s']||keys['arrowdown'])mz-=1;
-      if(keys['a']||keys['arrowleft'])mx-=1; if(keys['d']||keys['arrowright'])mx+=1;
+      if(keys['a'])mx-=1; if(keys['d'])mx+=1;
       if(isTouch){ mx+=touchMoveVec.x; mz+=touchMoveVec.z; }
       const len=Math.hypot(mx,mz)||1; mx/=len;mz/=len;
       const sinY=Math.sin(player.yaw),cosY=Math.cos(player.yaw);
