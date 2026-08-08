@@ -1197,6 +1197,26 @@
     player.yaw-=e.movementX*0.0022*mouseSens; player.pitch-=e.movementY*0.0022*mouseSens;
     player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch)); });
 
+  // Click-and-drag mouse look — a reliable fallback that works even when
+  // pointer lock isn't available/granted (some browsers/touch-capable
+  // laptops silently block or skip it). Left mouse button held + drag turns
+  // the view, independent of pointer-lock state or touch detection, so
+  // there's always a way to look around with a mouse.
+  let mouseLookActive=false, mlLastX=0, mlLastY=0;
+  addEventListener('mousedown',e=>{
+    if(mode!=='play'||locked||e.button!==0)return;
+    mouseLookActive=true; mlLastX=e.clientX; mlLastY=e.clientY;
+  });
+  addEventListener('mousemove',e=>{
+    if(!mouseLookActive||locked||mode!=='play')return;
+    const dx=e.clientX-mlLastX, dy=e.clientY-mlLastY;
+    mlLastX=e.clientX; mlLastY=e.clientY;
+    player.yaw-=dx*0.0028*mouseSens; player.pitch-=dy*0.0028*mouseSens;
+    player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch));
+  });
+  addEventListener('mouseup',()=>{ mouseLookActive=false; });
+  addEventListener('mouseleave',()=>{ mouseLookActive=false; });
+
   let mode='intro';
   const introEl=document.getElementById('intro'), endEl=document.getElementById('endscreen');
   const objEl=document.getElementById('obj'), hudEl=document.getElementById('hud');
