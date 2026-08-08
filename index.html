@@ -1673,7 +1673,7 @@
   // reveal after first render
   requestAnimationFrame(()=>{ animate(); setTimeout(()=>{loadwrap.style.opacity=0;setTimeout(()=>loadwrap.style.display='none',600);},250); });
   window.__HELL={start:()=>start(), dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}},
-    state:()=>({x:player.x,z:player.z,elev:player.elev,zone:curZone,mode:mode}),
+    state:()=>({x:player.x,z:player.z,elev:player.elev,zone:curZone,mode:mode,yaw:player.yaw,pitch:player.pitch}),
     teleport:(x,z)=>{player.x=x;player.z=z;},
     // testing helpers: list every registered zone's bounding rect/name so a
     // headless script can teleport to each one's centerpoint and check
