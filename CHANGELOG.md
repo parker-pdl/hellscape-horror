@@ -1,5 +1,109 @@
 # Hellscape Horror — Changelog
 
+## Session 08-08-2026 — Shadow figures removed, mobile controls, jump, pause menu/minimap/save, 20 new rooms
+
+A large feature pass covering everything Parker asked for in one go. Process:
+refactored the collision system to be data-driven first (regression-tested
+against the existing map before changing anything else), then removed the
+shadow figures, then added jump + the periodic scare, then the pause
+menu/minimap/save system, then mobile controls, then the 20 new rooms
+(tested last, in a batch, via the debug hook + headless Playwright).
+
+### 1. Shadow figures removed
+The whole shadow-figure system is gone — `createShadowFigure`, the
+`shadowFigures` array, all 4 push() call sites (crypt watcher, cave/boiler
+walkers, obsidian stalker), the scene-add loop, and the animate-loop
+update/proximity block. Blood splatter, gore decals, and the hazard system
+(slow zones, spike zones) are untouched and still fully working.
+
+### 2. Collision refactor: data-driven `zones` array
+`resolvePosition()` used to be a long hardcoded if/else chain, one block per
+room. It's now a loop over a `zones` array — each entry is a bounding rect,
+per-side wall-clearance margins (0 = open doorway into the next room, real
+margin = an actual wall), an elevation (constant or a function, for
+stairs/slopes), a zone name, and an optional one-time hint. Verified this
+refactor was behavior-identical to the old code before building anything new
+on top of it (all original zones teleport-tested with matching results).
+The exact same array now also feeds the minimap (see below), so the map can
+never drift out of sync with what's actually walkable.
+
+### 3. 20 new rooms, 4 new dead ends
+5 new rooms chained onto each of the 4 existing dead ends — the cave red
+room, the boiler red room, the flooded crypt, and the obsidian chamber —
+using the same `buildSegment` factory and material functions
+(`caveMat`/`boilerMat`/`stoneMat`/`obsidianMat`) with a tint, obstacle type,
+and torch-side variation per room. Each wing's chain includes two 90° turns
+(real corners, using the same overlapping-rect technique the original
+junction/stair corners already relied on), so the level now has real new
+turns to explore, not just longer straight halls. The final room of each
+chain gets the puzzle-box end door (moved here from the old, now-bypassed
+dead end) — the obsidian chamber's old unique glowing-seam "true end of the
+level" treatment was dropped in favor of the same door style as the other 3
+wings, now that it's a mid-chain room rather than the literal end.
+
+### 4. Space-bar jump
+Space gives the player upward velocity (only while grounded); gravity pulls
+them back down onto whatever floor elevation `resolvePosition` reports for
+their current position, so jumping still works correctly on stairs/slopes.
+
+### 5. Periodic jump scare (no shadow figures needed)
+`triggerJumpScare()` (the white flash + 4-note dissonant stinger) now fires
+on its own timer — first one 20-40s after descending, then every 45-90s
+after that (randomized each time), only while actually playing (never
+paused or in a menu).
+
+### 6. Pause menu, minimap, save/resume
+- **Pause**: Esc opens it. On desktop this is driven entirely by the native
+  pointer-lock-exit event (Esc always releases pointer lock on its own) —
+  deliberately not also wired to a separate keydown handler, to avoid any
+  risk of double-firing. On touch devices (no pointer lock) a dedicated
+  on-screen pause button opens/closes it instead.
+- **Resume / Resume Saved Game / Start New Game / Quit to Title** — all
+  present. Saves go to `localStorage` (position, facing, elapsed time,
+  timestamp) — written on pause and auto-saved every ~10s during play.
+- **Map** — a simple top-down canvas minimap, drawn straight from the same
+  `zones` array `resolvePosition` uses, plus a player marker with a facing
+  line. Not fancy — flat colored rectangles, no textures — but it can never
+  go out of sync with the real geometry since it reads the same data.
+- **Settings** — mouse sensitivity slider and a music volume slider.
+
+### 7. Mobile / touch controls (the most important ask)
+Touch is detected via `'ontouchstart' in window` / `navigator.maxTouchPoints`.
+On touch devices: pointer lock is never requested, and on-screen controls
+appear — a left-side drag joystick for movement, a right-side drag area for
+look, a JUMP button, and a pause/menu button. Desktop mouse/keyboard controls
+are unchanged and don't show any on-screen controls.
+
+### 8. Testing
+Regression-tested the zones refactor first (all 11 original zones,
+teleport + `state()`, zero mismatches) before adding anything new. After the
+20 new rooms were built, served the directory with `python3 -m http.server`
+and drove headless Chromium via Playwright
+(`executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'`):
+teleported to the centerpoint of all 31 zones (11 original + 20 new) and
+confirmed `zone`/`elev` resolve as expected for every one — **zero
+mismatches, zero page console errors**. Also exercised jump, pause/resume,
+minimap open/close, the settings sliders, and the scare-flash trigger
+through the extended `window.__HELL` debug hook
+(`zones()`, `pause()`, `resume()`, `jump()`, `scareNow()`), all working with
+no errors. Note: this sandbox's headless Chromium falls back to software
+WebGL, which makes each interaction noticeably slower than it will run on
+Parker's real hardware/GPU — that's a test-environment artifact, not a game
+performance issue.
+
+### Known limitations / judgment calls
+- New rooms are flat (no additional slopes) — variety comes from tint,
+  obstacle type, and turns, not elevation changes, to keep the collision
+  math simple and low-risk.
+- The crypt-wing extension includes a purely visual `spikes` obstacle
+  without a paired hazard trigger in one room (the original crypt hazard
+  pairing wasn't extended to the new rooms) — cosmetic only, doesn't affect
+  the (untouched) hazard system.
+- Settings are intentionally minimal: mouse sensitivity + music volume only.
+- Minimap is a simple flat-rectangle top-down view, not textured/detailed.
+
+---
+
 ## Session 30-07-2026 (evening) — Major expansion: new zones, hazards, smarter scares
 
 Built on top of the earlier same-day session (center corridor, obstacles,

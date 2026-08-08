@@ -64,6 +64,50 @@
     transition:transform .15s,box-shadow .2s,color .2s}
   #mute:hover{transform:scale(1.08);box-shadow:0 0 16px rgba(255,80,0,.5)}
   #mute.off{color:rgba(150,110,90,.45);border-color:rgba(110,75,55,.3)}
+
+  /* pause menu */
+  #pauseMenu{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
+    background:rgba(5,2,1,.86);backdrop-filter:blur(2px)}
+  #pauseMenu.hidden{display:none}
+  .pausePanel{width:min(88vw,340px);text-align:center}
+  .pauseTitle{font-family:'Cinzel';font-weight:800;letter-spacing:.1em;font-size:26px;color:#ff9a5a;
+    text-shadow:0 0 20px rgba(255,70,0,.6);margin-bottom:22px}
+  .pauseBtn{display:block;width:100%;margin:9px 0;padding:13px 10px;font-family:'Cinzel';font-weight:600;
+    letter-spacing:.14em;font-size:14px;color:#f0d9c0;background:rgba(60,20,10,.55);
+    border:1px solid rgba(255,120,50,.4);border-radius:4px;cursor:pointer;transition:background .15s,transform .1s}
+  .pauseBtn:hover{background:rgba(120,40,15,.7);transform:translateY(-1px)}
+  .pauseBtn:disabled{opacity:.4;cursor:not-allowed}
+  .pauseBtn.primary{background:linear-gradient(180deg,#ff8a3a,#c43a10);color:#0a0402;border:none}
+  .pauseSub{margin-top:10px;font-size:11px;letter-spacing:.14em;color:rgba(220,180,150,.55)}
+  .settingsRow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0;
+    font-size:12px;letter-spacing:.08em;color:#e8c9a8}
+  .settingsRow input[type=range]{flex:1;accent-color:#ff7a30}
+
+  /* minimap */
+  #minimapOverlay{position:fixed;inset:0;z-index:21;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;background:rgba(5,2,1,.9)}
+  #minimapOverlay.hidden{display:none}
+  #minimapCanvas{background:#0a0503;border:1px solid rgba(255,120,50,.4);border-radius:4px;
+    box-shadow:0 0 30px rgba(255,80,0,.2)}
+  #minimapClose{margin-top:16px}
+
+  /* mobile touch controls */
+  #touchControls{position:fixed;inset:0;z-index:7;pointer-events:none;display:none}
+  #touchControls.active{display:block}
+  #touchMove,#touchLook{position:absolute;bottom:0;width:50%;height:52%;pointer-events:auto;touch-action:none}
+  #touchMove{left:0}
+  #touchLook{right:0}
+  #touchStick{position:absolute;width:88px;height:88px;border-radius:50%;border:2px solid rgba(255,150,90,.5);
+    background:rgba(255,120,50,.12);left:26px;bottom:26px;pointer-events:none}
+  #touchStick .knob{position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(255,150,90,.55);
+    left:24px;top:24px}
+  #touchJump{position:absolute;right:26px;bottom:130px;width:68px;height:68px;border-radius:50%;
+    background:rgba(255,120,50,.22);border:2px solid rgba(255,150,90,.55);color:#ffd9b0;font-family:'Cinzel';
+    font-size:11px;letter-spacing:.06em;pointer-events:auto;touch-action:none}
+  #touchPause{position:fixed;top:16px;right:58px;z-index:8;width:34px;height:34px;border-radius:50%;
+    border:1px solid rgba(255,120,50,.4);background:rgba(20,6,3,.5);color:#ffb070;font-size:15px;
+    pointer-events:auto;touch-action:none;display:none}
+  #touchPause.active{display:flex;align-items:center;justify-content:center}
 </style>
 </head>
 <body>
@@ -87,6 +131,36 @@
   <button class="enter" id="againBtn">▾ DESCEND AGAIN ▾</button>
 </div>
 <div id="loadwrap"><div class="t">STOKING THE FIRES…</div></div>
+
+<div id="pauseMenu" class="screen hidden">
+  <div class="pausePanel" id="pauseMainPanel">
+    <div class="pauseTitle">PAUSED</div>
+    <button class="pauseBtn primary" id="btnResume">▾ Resume ▾</button>
+    <button class="pauseBtn" id="btnResumeSaved">Resume Saved Game</button>
+    <button class="pauseBtn" id="btnNewGame">Start New Game</button>
+    <button class="pauseBtn" id="btnMinimap">Map</button>
+    <button class="pauseBtn" id="btnSettings">Settings</button>
+    <button class="pauseBtn" id="btnQuit">Quit to Title</button>
+    <div class="pauseSub" id="pauseSaveInfo"></div>
+  </div>
+  <div class="pausePanel" id="settingsPanel" style="display:none">
+    <div class="pauseTitle" style="font-size:20px">SETTINGS</div>
+    <div class="settingsRow"><span>Mouse sensitivity</span><input type="range" id="sensSlider" min="0.3" max="2.5" step="0.1" value="1"></div>
+    <div class="settingsRow"><span>Music volume</span><input type="range" id="volSlider" min="0" max="1" step="0.05" value="0.55"></div>
+    <button class="pauseBtn" id="btnSettingsBack">Back</button>
+  </div>
+</div>
+<div id="minimapOverlay" class="screen hidden">
+  <canvas id="minimapCanvas" width="420" height="420"></canvas>
+  <button class="pauseBtn" id="minimapClose" style="width:180px">Close</button>
+</div>
+
+<button id="touchPause" aria-label="Pause">☰</button>
+<div id="touchControls">
+  <div id="touchMove"><div id="touchStick"><div class="knob"></div></div></div>
+  <div id="touchLook"></div>
+  <button id="touchJump">JUMP</button>
+</div>
 
 <script src="./three.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';"></script>
 <script>
@@ -115,7 +189,7 @@
   const camera=new THREE.PerspectiveCamera(74,innerWidth/innerHeight,0.05,140);
   camera.rotation.order='YXZ';
   const EYE=1.62;
-  const player={x:0,z:2.5,yaw:0,pitch:0,elev:0};   // start looking down -z (into the hall)
+  const player={x:0,z:2.5,yaw:0,pitch:0,elev:0,vy:0,airY:0,grounded:true};   // start looking down -z (into the hall)
   camera.position.set(player.x,EYE,player.z);
 
   // ---------------- procedural textures ----------------
@@ -679,42 +753,8 @@
   // call sites below just compute world coords directly rather than adding
   // a full matrix-transform helper.
 
-  // shadow figure system — dark silhouettes with three behavior types:
-  //  'walker'  — patrols back and forth along a straight line in the distance
-  //  'watcher' — stands still, slowly turns to face the player when close
-  //  'stalker' — like walker, but the FIRST time the player gets close it
-  //              triggers a scripted jump scare (flash + stinger), once only
-  function createShadowFigure(x, z, dirX, dirZ, opts){
-    opts=opts||{};
-    const grp=new THREE.Group();
-    const shadowMat=new THREE.MeshBasicMaterial({color:0x0a0605});
-    const body=new THREE.Mesh(new THREE.BoxGeometry(0.6,2.2,0.4), shadowMat);
-    body.position.y=1.1; grp.add(body);
-    const head=new THREE.Mesh(new THREE.SphereGeometry(0.35,8,8), shadowMat);
-    head.position.y=2.8; grp.add(head);
-    const armL=new THREE.Mesh(new THREE.BoxGeometry(0.25,1.4,0.2), shadowMat);
-    armL.position.set(-0.45,1.8,0); grp.add(armL);
-    const armR=new THREE.Mesh(new THREE.BoxGeometry(0.25,1.4,0.2), shadowMat);
-    armR.position.set(0.45,1.8,0); grp.add(armR);
-    const legL=new THREE.Mesh(new THREE.BoxGeometry(0.22,1.3,0.2), shadowMat);
-    legL.position.set(-0.22,0.55,0); grp.add(legL);
-    const legR=new THREE.Mesh(new THREE.BoxGeometry(0.22,1.3,0.2), shadowMat);
-    legR.position.set(0.22,0.55,0); grp.add(legR);
-
-    const dlen=Math.hypot(dirX,dirZ)||1;
-    return {
-      grp, armL, armR, legL, legR,
-      x, z, startX:x, startZ:z,
-      dirX:dirX/dlen, dirZ:dirZ/dlen,
-      patrolDist: opts.patrolDist!=null ? opts.patrolDist : 10,
-      speed: opts.speed || (0.8+Math.random()*0.4),
-      phase: Math.random()*Math.PI*2,
-      type: opts.type || 'walker',
-      traveled: 0, dir: 1, triggered:false, fadeUntilClose: !!opts.fadeUntilClose
-    };
-  }
-
-  const shadowFigures=[];
+  // (shadow-figure system removed — Parker felt they looked "ridiculous";
+  // blood splatter/gore and the hazard system below stay.)
 
   // ---- wing constants ----
   const CAVE_HW=4.0, CAVE_H=5.4, CAVE_LEN=26;
@@ -725,6 +765,24 @@
   const CENTER_LEN=22; // new center corridor connecting the junction
   const CRYPT_HW=3.6, CRYPT_H=5.0, CRYPT_LEN=22; // flooded crypt, off JZ3 on the right
   const OBSID_HW=4.2, OBSID_H=6.6, OBSID_LEN=18; // obsidian chamber, continues past the center corridor
+
+  // Data-driven zones array — declared here (before any wings are built) so
+  // both the original wings AND the 20 new rooms below can register into it
+  // as they're built. resolvePosition() (defined later, near player input)
+  // just walks this array; the same array also feeds the minimap.
+  const ZM=0.7; // default wall clearance margin
+  const zones=[];
+  function addZone(x0,x1,z0,z1, elev, zoneName, hint, margins){
+    const mg=margins||{};
+    zones.push({
+      x0:Math.min(x0,x1), x1:Math.max(x0,x1), z0:Math.min(z0,z1), z1:Math.max(z0,z1),
+      mx0: mg.mx0!=null?mg.mx0:ZM, mx1: mg.mx1!=null?mg.mx1:ZM,
+      mz0: mg.mz0!=null?mg.mz0:ZM, mz1: mg.mz1!=null?mg.mz1:ZM,
+      elev, zone:zoneName, hint: hint||null
+    });
+    return zones[zones.length-1];
+  }
+  const DIR=[{dx:0,dz:-1},{dx:1,dz:0},{dx:0,dz:1},{dx:-1,dz:0}]; // matches YAW[] heading indices
 
   const caveTurnX = -HW-CAVE_LEN;
   const boilTurnX =  HW+BOIL_LEN;
@@ -785,7 +843,7 @@
   const caveRedGrp = buildSegment({x:caveTurnX,y:STAIR_RISE,z:caveHallEndZ}, 0, REDC_LEN, 0, CAVE_HW, CAVE_H, redMat,
     {floor:0x7a0000,ceil:0x4a0000,wall:0xb30000});
   for(let i=1;i<=4;i++) addChain(caveRedGrp, (i%2?-1:1)*(CAVE_HW-1.1), i*(REDC_LEN/5), CAVE_H, 2.8+Math.random()*1.0, 0x9a9a9a);
-  addEndDoor(caveRedGrp, REDC_LEN, CAVE_HW, CAVE_H, doorBoxTex);
+  // (dead end door moved past 5 new cave-side rooms, below)
 
   // --- RIGHT WING: boiler room, pipes, blood ---
   const boilCorridorGrp = buildSegment({x:HW,y:0,z:JZ}, 1, BOIL_LEN, 0, BOIL_HW, BOIL_H, boilerMat,
@@ -855,7 +913,7 @@
   const boilRedGrp = buildSegment({x:boilTurnX,y:-STAIR_RISE,z:boilHallEndZ}, 0, REDE_LEN, 0, BOIL_HW, BOIL_H, redMat,
     {floor:0x7a0000,ceil:0x4a0000,wall:0xb30000});
   for(let i=1;i<=4;i++) addChain(boilRedGrp, (i%2?-1:1)*(BOIL_HW-1.1), i*(REDE_LEN/5), BOIL_H, 2.8+Math.random()*1.0, 0x9a9a9a);
-  addEndDoor(boilRedGrp, REDE_LEN, BOIL_HW, BOIL_H, doorBoxTex);
+  // (dead end door moved past 5 new boiler-side rooms, below)
 
   // ---- FLOODED CRYPT: branches off the main hall at JZ3, right side ----
   const cryptGrp = buildSegment({x:HW,y:0,z:JZ3}, 1, CRYPT_LEN, 0, CRYPT_HW, CRYPT_H, stoneMat,
@@ -896,10 +954,8 @@
   addTorch(cryptGrp, (CRYPT_HW-1.0), 3.0, CRYPT_LEN*0.5, 1, 0x4aa88a);
   scatterBloodWalls(cryptGrp, 0, CRYPT_LEN, CRYPT_HW, CRYPT_H, 5);
   scatterBloodFloorCeil(cryptGrp, 0, CRYPT_LEN, CRYPT_HW, CRYPT_H, 0, 4);
-  addEndDoor(cryptGrp, CRYPT_LEN, CRYPT_HW, CRYPT_H, doorBoxTex);
-  // a watcher lurks among the coffins — stands still, slowly turns to face
-  // the player as they approach, never chases
-  shadowFigures.push(createShadowFigure(HW+CRYPT_LEN*0.8, JZ3+1.2, 1, 0, {type:'watcher'}));
+  // (crypt used to dead-end here with an addEndDoor — it now continues into
+  // 5 new rooms below, so the door moved to the true new dead end.)
 
   // ---- CENTER CORRIDOR: a new passage descending from the junction ----
   const centerCorrGrp = buildSegment({x:0,y:0,z:JZ}, 0, CENTER_LEN, -1.8, 3.2, 5.2, caveMat,
@@ -937,6 +993,8 @@
   scatterBloodWalls(centerCorrGrp, 0, CENTER_LEN, 3.2, 5.2, 8);
   scatterBloodFloorCeil(centerCorrGrp, 0, CENTER_LEN, 3.2, 5.2, 6, 5);
   const centerEndZ=JZ-CENTER_LEN; // world Z where the slope bottoms out, y=-1.8 there
+  const centerHW=3.2; // center corridor half-width (also used by resolvePosition, below)
+  const obsidEndZ=centerEndZ-OBSID_LEN; // where the (original) obsidian chamber run ends
 
   // ---- OBSIDIAN CHAMBER: the climactic dead end, continuing straight past
   // the bottom of the center corridor's descent ----
@@ -958,33 +1016,143 @@
   }
   scatterBloodWalls(obsidGrp, 0, OBSID_LEN, OBSID_HW, OBSID_H, 6);
   scatterBloodFloorCeil(obsidGrp, 0, OBSID_LEN, OBSID_HW, OBSID_H, 3, 3);
-  // sealed with glowing red seams rather than the puzzle-box door motif used
-  // elsewhere — this is the true end of the level, not another side-room
-  const obsidCap=new THREE.Mesh(new THREE.PlaneGeometry(OBSID_HW*2,OBSID_H),
-    new THREE.MeshStandardMaterial({color:0x100210,roughness:.6,metalness:.6,side:THREE.DoubleSide}));
-  obsidCap.rotation.y=Math.PI; obsidCap.position.set(0,OBSID_H/2,OBSID_LEN-0.03);
-  obsidGrp.add(obsidCap);
-  const obsidSeamMat=new THREE.MeshBasicMaterial({color:0xff2a8a,transparent:true,blending:THREE.AdditiveBlending});
-  const obsidSeams=[];
-  for(let k=-2;k<=2;k++){
-    const seam=new THREE.Mesh(new THREE.PlaneGeometry(0.05,OBSID_H-0.6),obsidSeamMat);
-    seam.position.set(k*1.4,OBSID_H/2,OBSID_LEN-0.1); obsidGrp.add(seam); obsidSeams.push(seam);
-  }
-  const obsidGlow=new THREE.PointLight(0xff2a8a,2.6,18,2);
-  obsidGlow.position.set(0,OBSID_H*0.5,OBSID_LEN-1.5); obsidGrp.add(obsidGlow);
+  // (this used to be capped here with glowing seams — it now continues into
+  // 5 new obsidian-wing rooms below, so the seal moved to the true new end)
+  // (the obsidian chamber's old glowing-seam cap moved to the new true dead
+  // end, below, where it's now just a plain addEndDoor like the other 3
+  // wings — simpler and consistent now that this room is a mid-chain room)
 
-  // shadow figures patrol the far depths — cave and boiler each get a
-  // patrolling walker positioned in their ACTUAL red-room world coordinates
-  // (the previous build hardcoded a small x-offset near world x=0 for every
-  // figure regardless of which wing it belonged to, so they weren't really
-  // standing where the red rooms are — fixed here by computing real world
-  // positions per wing).
-  shadowFigures.push(createShadowFigure(caveTurnX, caveRedEndZ+6, 0, -1, {type:'walker', patrolDist:6, speed:0.7}));
-  shadowFigures.push(createShadowFigure(boilTurnX, boilRedEndZ+5, 0, -1, {type:'walker', patrolDist:5, speed:0.9}));
-  // a stalker waits at the far end of the obsidian chamber — first time the
-  // player gets close, it triggers the scripted jump scare
-  shadowFigures.push(createShadowFigure(0, centerEndZ-(OBSID_LEN-3), 0, -1, {type:'stalker', patrolDist:0, speed:0}));
-  for(const sf of shadowFigures) g.add(sf.grp);
+  // ================================================================
+  // 20 NEW ROOMS — 5 chained onto each of the 4 existing dead ends (cave red
+  // room, boiler red room, flooded crypt, obsidian chamber). Each room is a
+  // straight buildSegment reusing that wing's own material function with a
+  // tint/obstacle/blood variation; several legs per wing turn 90° for real
+  // corners. Every room registers itself into `zones` (used by both
+  // resolvePosition and the minimap) and the final room of each chain gets
+  // the puzzle-box end door, moved here from the old (now bypassed) dead end.
+  // ================================================================
+  function addWingRoom(cursor, heading, run, hw, h, matFn, tints, zoneName, hint, dress, isFinal){
+    const grp=buildSegment({x:cursor.x,y:cursor.y,z:cursor.z}, heading, run, 0, hw, h, matFn, tints);
+    const d=DIR[heading];
+    const endX=cursor.x+d.dx*run, endZ=cursor.z+d.dz*run;
+    let x0,x1,z0,z1,margins;
+    // the end connecting back to the PREVIOUS room always stays open (0);
+    // the far end is open too UNLESS this is the true dead end of the chain
+    // (isFinal), in which case it gets a real wall margin — that's where
+    // sealWingEnd()'s addEndDoor sits.
+    const farM = isFinal ? ZM : 0;
+    if(heading===0||heading===2){
+      x0=cursor.x-hw; x1=cursor.x+hw;
+      z0=Math.min(cursor.z,endZ); z1=Math.max(cursor.z,endZ);
+      margins = d.dz<0 ? {mz0:farM,mz1:0} : {mz0:0,mz1:farM};
+    } else {
+      z0=cursor.z-hw; z1=cursor.z+hw;
+      x0=Math.min(cursor.x,endX); x1=Math.max(cursor.x,endX);
+      margins = d.dx<0 ? {mx0:farM,mx1:0} : {mx0:0,mx1:farM};
+    }
+    addZone(x0,x1,z0,z1, cursor.y, zoneName, hint||null, margins);
+    if(dress) dress(grp, run, hw, h);
+    cursor.x=endX; cursor.z=endZ; cursor.heading=heading;
+    return grp;
+  }
+  function sealWingEnd(grp, run, hw, h, chainColor){
+    for(let i=1;i<=4;i++) addChain(grp, (i%2?-1:1)*(hw-1.0), i*(run/5), h, 2.4+Math.random()*1.0, chainColor||0x8a8a8a);
+    addEndDoor(grp, run, hw, h, doorBoxTex);
+  }
+  function dressWingRoom(grp, run, hw, h, obstType, torchSide, torchColor){
+    for(let i=0;i<3;i++) addObstacle(grp, (Math.random()-.5)*(hw*1.5), 0.3, run*(0.18+i*0.3), obstType, hw);
+    scatterBloodWalls(grp, 0, run, hw, h, 5);
+    scatterBloodFloorCeil(grp, 0, run, hw, h, 3, 2);
+    addTorch(grp, torchSide*(hw-1.0), h*0.55, run*(0.4+Math.random()*0.2), torchSide, torchColor);
+  }
+
+  // --- cave-side extension (5 rooms, 2 turns) ---
+  {
+    const cur={x:caveTurnX, y:STAIR_RISE, z:caveRedEndZ};
+    const specs=[
+      {run:14, heading:0, obst:'debris', torch:-1, tint:0x342f28, hint:'THE ROCK NARROWS'},
+      {run:12, heading:3, obst:'box',    torch: 1, tint:0x2e2a22, hint:'THE PASSAGE TURNS'},
+      {run:14, heading:0, obst:'barrel', torch:-1, tint:0x3a3428, hint:null},
+      {run:12, heading:1, obst:'debris', torch: 1, tint:0x282420, hint:'IT BENDS BACK AGAIN'},
+      {run:18, heading:0, obst:'box',    torch:-1, tint:0x201c17, hint:'A DEAD END, SEALED', final:true},
+    ];
+    specs.forEach((sp,idx)=>{
+      addWingRoom(cur, sp.heading, sp.run, CAVE_HW, CAVE_H, caveMat,
+        {floor:sp.tint, ceil:0x121614, wall:sp.tint},
+        'cave', sp.hint?{key:'caveExt'+idx,text:sp.hint}:null,
+        (grp,run,hw,h)=>{
+          dressWingRoom(grp,run,hw,h,sp.obst,sp.torch,0x4a9a8a);
+          if(sp.final) sealWingEnd(grp,run,hw,h,0x9a9a9a);
+        }, !!sp.final);
+    });
+  }
+
+  // --- boiler-side extension (5 rooms, 2 turns) ---
+  {
+    const cur={x:boilTurnX, y:-STAIR_RISE, z:boilRedEndZ};
+    const specs=[
+      {run:14, heading:0, obst:'barrel', torch: 1, tint:0x3a2f24, hint:'PIPES HISS IN THE DARK'},
+      {run:12, heading:1, obst:'box',    torch:-1, tint:0x362c22, hint:'THE PASSAGE TURNS'},
+      {run:14, heading:0, obst:'debris', torch: 1, tint:0x40332a, hint:null},
+      {run:12, heading:3, obst:'barrel', torch:-1, tint:0x2e261f, hint:'IT BENDS BACK AGAIN'},
+      {run:18, heading:0, obst:'box',    torch: 1, tint:0x241d17, hint:'A DEAD END, SEALED', final:true},
+    ];
+    specs.forEach((sp,idx)=>{
+      addWingRoom(cur, sp.heading, sp.run, BOIL_HW, BOIL_H, boilerMat,
+        {floor:sp.tint, ceil:0x18120e, wall:sp.tint},
+        'boiler', sp.hint?{key:'boilExt'+idx,text:sp.hint}:null,
+        (grp,run,hw,h)=>{
+          dressWingRoom(grp,run,hw,h,sp.obst,sp.torch,0xffa050);
+          addSteamPuffs(grp, 14, run, hw, h);
+          if(sp.final) sealWingEnd(grp,run,hw,h,0x8a8a8a);
+        }, !!sp.final);
+    });
+  }
+
+  // --- crypt extension (5 rooms, 2 turns, still flooded-stone themed) ---
+  {
+    const cur={x:cryptTurnX, y:0, z:JZ3};
+    const specs=[
+      {run:14, heading:1, obst:'coffin', torch: 1, tint:0x223028, hint:'THE CRYPT GOES ON'},
+      {run:12, heading:2, obst:'spikes', torch:-1, tint:0x1e2a22, hint:'THE PASSAGE TURNS'},
+      {run:14, heading:1, obst:'coffin', torch: 1, tint:0x263426, hint:null},
+      {run:12, heading:0, obst:'debris', torch:-1, tint:0x1a251f, hint:'IT BENDS BACK AGAIN'},
+      {run:18, heading:1, obst:'coffin', torch: 1, tint:0x141d18, hint:'A DEAD END, SEALED', final:true},
+    ];
+    specs.forEach((sp,idx)=>{
+      addWingRoom(cur, sp.heading, sp.run, CRYPT_HW, CRYPT_H, stoneMat,
+        {floor:sp.tint, ceil:0x0e1512, wall:sp.tint},
+        'crypt', sp.hint?{key:'cryptExt'+idx,text:sp.hint}:null,
+        (grp,run,hw,h)=>{
+          dressWingRoom(grp,run,hw,h,sp.obst,sp.torch,0x4aa88a);
+          addBloodDrips(grp, 24, run, hw, h, 0xffffff, waterDropTex);
+          if(sp.final) sealWingEnd(grp,run,hw,h,0x7aa898);
+        }, !!sp.final);
+    });
+  }
+
+  // --- obsidian extension (5 rooms, 2 turns) — the true dead end of the
+  // level now lives at the end of this chain, sealed the same way as the
+  // other three wings for consistency ---
+  {
+    const cur={x:0, y:-1.8, z:obsidEndZ};
+    const specs=[
+      {run:14, heading:0, obst:'box', torch: 1, tint:0x0c0512, hint:'THE DARK DEEPENS'},
+      {run:12, heading:1, obst:'box', torch:-1, tint:0x100613, hint:'THE PASSAGE TURNS'},
+      {run:14, heading:0, obst:'box', torch: 1, tint:0x0a0510, hint:null},
+      {run:12, heading:3, obst:'box', torch:-1, tint:0x120714, hint:'IT BENDS BACK AGAIN'},
+      {run:18, heading:0, obst:'box', torch: 1, tint:0x080410, hint:'A DEAD END, SEALED', final:true},
+    ];
+    specs.forEach((sp,idx)=>{
+      addWingRoom(cur, sp.heading, sp.run, OBSID_HW, OBSID_H, obsidianMat,
+        {floor:sp.tint, ceil:0x06020a, wall:sp.tint},
+        'obsidian', sp.hint?{key:'obsidExt'+idx,text:sp.hint}:null,
+        (grp,run,hw,h)=>{
+          dressWingRoom(grp,run,hw,h,sp.obst,sp.torch,0xaa2a7a);
+          if(sp.final) sealWingEnd(grp,run,hw,h,0x5a2a4a);
+        }, !!sp.final);
+    });
+  }
 
   // ---------------- lights ----------------
   scene.add(new THREE.AmbientLight(0x241009,0.5));
@@ -1010,129 +1178,272 @@
   scene.add(dust);
 
   // ---------------- input ----------------
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0) || (navigator.msMaxTouchPoints>0);
+  let mouseSens=1;
   const keys={};
-  addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;});
+  addEventListener('keydown',e=>{ keys[e.key.toLowerCase()]=true; if(e.key===' '&&mode==='play') e.preventDefault(); });
   addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
   let locked=false;
-  document.addEventListener('pointerlockchange',()=>{locked=(document.pointerLockElement===canvas);});
+  // Escape/pause: the ONE mechanism for opening the pause menu on desktop is
+  // the native pointer-lock-exit event — pressing Esc while locked always
+  // exits pointer lock on its own, so listening here (rather than also
+  // adding a separate keydown Escape handler) avoids any risk of the pause
+  // menu opening twice from a single Esc press.
+  document.addEventListener('pointerlockchange',()=>{
+    locked=(document.pointerLockElement===canvas);
+    if(!locked && mode==='play' && !isTouch) openPause();
+  });
   addEventListener('mousemove',e=>{ if(!locked||mode!=='play')return;
-    player.yaw-=e.movementX*0.0022; player.pitch-=e.movementY*0.0022;
+    player.yaw-=e.movementX*0.0022*mouseSens; player.pitch-=e.movementY*0.0022*mouseSens;
     player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch)); });
 
   let mode='intro';
   const introEl=document.getElementById('intro'), endEl=document.getElementById('endscreen');
   const objEl=document.getElementById('obj'), hudEl=document.getElementById('hud');
   const hintShown={};
+  const pauseMenu=document.getElementById('pauseMenu'), pauseMainPanel=document.getElementById('pauseMainPanel'),
+        settingsPanel=document.getElementById('settingsPanel'), minimapOverlay=document.getElementById('minimapOverlay'),
+        pauseSaveInfo=document.getElementById('pauseSaveInfo'), btnResumeSaved=document.getElementById('btnResumeSaved');
+
   function start(){
     if(mode==='play')return;
-    introEl.classList.add('hidden'); endEl.classList.add('hidden');
+    introEl.classList.add('hidden'); endEl.classList.add('hidden'); pauseMenu.classList.add('hidden');
     mode='play'; objEl.textContent='Reach the Gate at the end of the hall';
     hudEl.textContent='the fire keeps the dark at bay'; hudEl.style.opacity=1;
     setTimeout(()=>{hudEl.style.opacity=0;},6000);
-    try{canvas.requestPointerLock();}catch(e){}
+    if(!isTouch){ try{canvas.requestPointerLock();}catch(e){} }
   }
   document.getElementById('enterBtn').addEventListener('click',start);
   document.getElementById('againBtn').addEventListener('click',()=>{
-    player.x=0;player.z=2.5;player.yaw=0;player.pitch=0;player.elev=0;
-    for(const k in hintShown) delete hintShown[k];
+    resetPlayerToSpawn();
     start();
   });
-  canvas.addEventListener('click',()=>{ if(mode==='play'&&!locked){try{canvas.requestPointerLock();}catch(e){}} });
+  canvas.addEventListener('click',()=>{ if(mode==='play'&&!locked&&!isTouch){try{canvas.requestPointerLock();}catch(e){}} });
 
   function endGame(title,sub){ mode='end'; document.exitPointerLock&&document.exitPointerLock();
     document.getElementById('endtitle').textContent=title; document.getElementById('endsub').textContent=sub;
-    endEl.classList.remove('hidden'); }
+    endEl.classList.remove('hidden'); clearSave(); }
 
   addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
   function showHint(key,text){ if(hintShown[key])return; hintShown[key]=true; objEl.style.opacity=0;
     setTimeout(()=>{objEl.textContent=text; objEl.style.opacity=1;},350); }
 
+  function resetPlayerToSpawn(){
+    player.x=0;player.z=2.5;player.yaw=0;player.pitch=0;player.elev=0;player.vy=0;player.airY=0;player.grounded=true;
+    for(const k in hintShown) delete hintShown[k];
+  }
+
+  // ---------------- save / resume (localStorage) ----------------
+  const SAVE_KEY='hellscapeSave';
+  function writeSave(){
+    try{
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        x:player.x, z:player.z, yaw:player.yaw, pitch:player.pitch,
+        elapsed: clock?clock.elapsedTime:0, ts: Date.now()
+      }));
+    }catch(e){}
+  }
+  function readSave(){ try{ return JSON.parse(localStorage.getItem(SAVE_KEY)); }catch(e){ return null; } }
+  function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+  function refreshSaveInfo(){
+    const s=readSave();
+    if(s){ btnResumeSaved.disabled=false; pauseSaveInfo.textContent='Saved '+new Date(s.ts).toLocaleString(); }
+    else { btnResumeSaved.disabled=true; pauseSaveInfo.textContent='No saved game yet'; }
+  }
+
+  // ---------------- pause menu ----------------
+  function openPause(){
+    if(mode!=='play')return;
+    mode='paused';
+    document.exitPointerLock&&document.exitPointerLock();
+    settingsPanel.style.display='none'; pauseMainPanel.style.display='block';
+    minimapOverlay.classList.add('hidden');
+    refreshSaveInfo();
+    pauseMenu.classList.remove('hidden');
+    writeSave();
+  }
+  function resumeGame(){
+    if(mode!=='paused')return;
+    pauseMenu.classList.add('hidden'); minimapOverlay.classList.add('hidden');
+    mode='play';
+    if(!isTouch){ try{canvas.requestPointerLock();}catch(e){} }
+  }
+  function resumeSavedGame(){
+    const s=readSave(); if(!s)return;
+    player.x=s.x; player.z=s.z; player.yaw=s.yaw; player.pitch=s.pitch; player.vy=0; player.airY=0; player.grounded=true;
+    resumeGame();
+  }
+  function startNewGameFromPause(){
+    clearSave();
+    resetPlayerToSpawn();
+    resumeGame();
+  }
+  function quitToTitle(){
+    pauseMenu.classList.add('hidden'); minimapOverlay.classList.add('hidden');
+    mode='intro';
+    introEl.classList.remove('hidden');
+  }
+  document.getElementById('btnResume').addEventListener('click',resumeGame);
+  document.getElementById('btnResumeSaved').addEventListener('click',resumeSavedGame);
+  document.getElementById('btnNewGame').addEventListener('click',startNewGameFromPause);
+  document.getElementById('btnQuit').addEventListener('click',quitToTitle);
+  document.getElementById('btnSettings').addEventListener('click',()=>{ pauseMainPanel.style.display='none'; settingsPanel.style.display='block'; });
+  document.getElementById('btnSettingsBack').addEventListener('click',()=>{ settingsPanel.style.display='none'; pauseMainPanel.style.display='block'; });
+  document.getElementById('sensSlider').addEventListener('input',e=>{ mouseSens=parseFloat(e.target.value); });
+  document.getElementById('volSlider').addEventListener('input',e=>{
+    const bgmEl=document.getElementById('bgm'); if(bgmEl) bgmEl.volume=parseFloat(e.target.value);
+  });
+
+  // ---------------- minimap ----------------
+  // Drawn straight from the same `zones` array resolvePosition() uses, so it
+  // can never drift out of sync with the actual walkable geometry.
+  function drawMinimap(){
+    const cv=document.getElementById('minimapCanvas'), c2=cv.getContext('2d');
+    const W=cv.width,H=cv.height;
+    c2.fillStyle='#0a0503'; c2.fillRect(0,0,W,H);
+    const allRects=zones.concat([{x0:-HW,x1:HW,z0:ZEND,z1:3.2}]); // include the main hall
+    let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+    for(const zn of allRects){ minX=Math.min(minX,zn.x0);maxX=Math.max(maxX,zn.x1);minZ=Math.min(minZ,zn.z0);maxZ=Math.max(maxZ,zn.z1); }
+    const pad=20, spanX=Math.max(1,maxX-minX), spanZ=Math.max(1,maxZ-minZ);
+    const scale=Math.min((W-pad*2)/spanX,(H-pad*2)/spanZ);
+    const toPx=(x,z)=>[pad+(x-minX)*scale, pad+(z-minZ)*scale];
+    c2.strokeStyle='rgba(255,140,80,.65)'; c2.fillStyle='rgba(120,50,20,.4)'; c2.lineWidth=1;
+    for(const zn of allRects){
+      const p0=toPx(zn.x0,zn.z0), p1=toPx(zn.x1,zn.z1);
+      c2.fillRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
+      c2.strokeRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
+    }
+    // player marker + facing (matches the forward-vector sign convention
+    // used by the movement code below: forward = (-sin(yaw), -cos(yaw)))
+    const pp=toPx(player.x,player.z);
+    const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
+    c2.strokeStyle='#ff5a2a'; c2.lineWidth=2.5;
+    c2.beginPath(); c2.moveTo(pp[0],pp[1]); c2.lineTo(pp[0]+fx*16,pp[1]+fz*16); c2.stroke();
+    c2.fillStyle='#ffd9b0'; c2.beginPath(); c2.arc(pp[0],pp[1],5,0,Math.PI*2); c2.fill();
+  }
+  function openMinimap(){
+    minimapOverlay.classList.remove('hidden');
+    drawMinimap();
+  }
+  document.getElementById('btnMinimap').addEventListener('click',openMinimap);
+  document.getElementById('minimapClose').addEventListener('click',()=>{ minimapOverlay.classList.add('hidden'); });
+
+  // ---------------- mobile / touch controls ----------------
+  // No pointer lock on touch devices — a left-side drag joystick drives
+  // movement, a right-side drag area drives look, plus dedicated jump and
+  // pause buttons. Desktop keyboard/mouse controls are untouched.
+  const touchControlsEl=document.getElementById('touchControls');
+  const touchPauseEl=document.getElementById('touchPause');
+  const touchMoveVec={x:0,z:0};
+  if(isTouch){
+    touchControlsEl.classList.add('active');
+    touchPauseEl.classList.add('active');
+    const ctrlsEl=document.querySelector('.ctrls');
+    if(ctrlsEl) ctrlsEl.textContent='DRAG LEFT — MOVE   ·   DRAG RIGHT — LOOK   ·   JUMP / MENU BUTTONS';
+
+    const touchMoveEl=document.getElementById('touchMove'), touchLookEl=document.getElementById('touchLook');
+    const touchStickEl=document.getElementById('touchStick'), touchKnob=touchStickEl.querySelector('.knob');
+    const touchJumpEl=document.getElementById('touchJump');
+    let moveId=null, moveStartX=0, moveStartY=0;
+    touchMoveEl.addEventListener('touchstart',e=>{
+      const t=e.changedTouches[0]; moveId=t.identifier; moveStartX=t.clientX; moveStartY=t.clientY;
+      touchStickEl.style.left=Math.max(10,t.clientX-44)+'px'; touchStickEl.style.bottom=Math.max(10,innerHeight-t.clientY-44)+'px';
+      e.preventDefault();
+    },{passive:false});
+    touchMoveEl.addEventListener('touchmove',e=>{
+      for(const t of e.changedTouches){
+        if(t.identifier!==moveId) continue;
+        let dx=t.clientX-moveStartX, dy=t.clientY-moveStartY;
+        const maxR=48, len=Math.hypot(dx,dy);
+        if(len>maxR){ dx=dx/len*maxR; dy=dy/len*maxR; }
+        touchMoveVec.x=dx/maxR; touchMoveVec.z=-dy/maxR;
+        touchKnob.style.transform='translate('+dx+'px,'+dy+'px)';
+      }
+      e.preventDefault();
+    },{passive:false});
+    function endMove(e){
+      for(const t of e.changedTouches){ if(t.identifier===moveId){ moveId=null; touchMoveVec.x=0; touchMoveVec.z=0; touchKnob.style.transform='translate(0,0)'; } }
+    }
+    touchMoveEl.addEventListener('touchend',endMove); touchMoveEl.addEventListener('touchcancel',endMove);
+
+    let lookId=null, lastX=0, lastY=0;
+    touchLookEl.addEventListener('touchstart',e=>{ const t=e.changedTouches[0]; lookId=t.identifier; lastX=t.clientX; lastY=t.clientY; e.preventDefault(); },{passive:false});
+    touchLookEl.addEventListener('touchmove',e=>{
+      for(const t of e.changedTouches){
+        if(t.identifier!==lookId) continue;
+        const dx=t.clientX-lastX, dy=t.clientY-lastY; lastX=t.clientX; lastY=t.clientY;
+        if(mode==='play'){
+          player.yaw-=dx*0.0034*mouseSens; player.pitch-=dy*0.0034*mouseSens;
+          player.pitch=Math.max(-1.35,Math.min(1.35,player.pitch));
+        }
+      }
+      e.preventDefault();
+    },{passive:false});
+    function endLook(e){ for(const t of e.changedTouches){ if(t.identifier===lookId) lookId=null; } }
+    touchLookEl.addEventListener('touchend',endLook); touchLookEl.addEventListener('touchcancel',endLook);
+
+    touchJumpEl.addEventListener('touchstart',e=>{ keys[' ']=true; e.preventDefault(); },{passive:false});
+    touchJumpEl.addEventListener('touchend',e=>{ keys[' ']=false; e.preventDefault(); },{passive:false});
+    touchJumpEl.addEventListener('touchcancel',e=>{ keys[' ']=false; },{passive:false});
+  }
+  touchPauseEl.addEventListener('click',()=>{ if(mode==='play') openPause(); else if(mode==='paused') resumeGame(); });
+
   // ---------------- movement / collision across the branching wings ----------------
-  function inRect(x,z,x0,x1,z0,z1){ return x>=Math.min(x0,x1)&&x<=Math.max(x0,x1)&&z>=Math.min(z0,z1)&&z<=Math.max(z0,z1); }
-  const M=0.7; // wall clearance margin for wing corridors
-  const centerHW=3.2;
-  const obsidEndZ=centerEndZ-OBSID_LEN;
+  // Data-driven zones: each entry is a bounding rect (x0..x1, z0..z1) plus
+  // per-side clearance margins (mx0/mx1/mz0/mz1 — 0 means "open doorway that
+  // continues into the next zone", M means "real wall here"), an elevation
+  // (constant or a function of the clamped position, for slopes/stairs), a
+  // zone name, and an optional one-time hint. resolvePosition() just walks
+  // this array — new rooms are added by pushing more entries (see the 20
+  // new rooms below) rather than growing an if/else chain. The same array
+  // powers the minimap.
+  const M=ZM; // alias — original name used throughout this section
+  // (centerHW / obsidEndZ declared earlier, right after the obsidian chamber
+  // was built, since the new obsidian-wing rooms need obsidEndZ too)
+
+  // obsidian chamber — no longer the dead end (continues into 5 new rooms), both z ends open
+  addZone(-OBSID_HW,OBSID_HW, obsidEndZ,centerEndZ, -1.8, 'obsidian',
+    {key:'obsidian',text:'THE STONE HERE DRINKS THE LIGHT'}, {mz0:0,mz1:0});
+  // center corridor — descends from the junction, both ends open (connects hall <-> obsidian)
+  addZone(-centerHW,centerHW, centerEndZ,JZ, (cx,cz)=>-((JZ-cz)/CENTER_LEN)*1.8, 'center',
+    {key:'center',text:'A DARK PATH DESCENDS'}, {mz0:0,mz1:0});
+  // flooded crypt — no longer the dead end (continues into 5 new rooms), both x ends open
+  addZone(HW,cryptTurnX, JZ3-CRYPT_HW,JZ3+CRYPT_HW, 0, 'crypt',
+    {key:'crypt',text:'COLD WATER CLOSES AROUND YOUR ANKLES'}, {mx0:0,mx1:0});
+  // cave stairs
+  addZone(caveTurnX-CAVE_HW,caveTurnX+CAVE_HW, caveStairEndZ,JZ,
+    (cx,cz)=>((JZ-cz)/STAIR_LEN)*STAIR_RISE, 'cave', {key:'caveStairs',text:'THE PASSAGE CLIMBS'}, {mz0:0,mz1:0});
+  // cave hallway C
+  addZone(caveTurnX-CAVE_HW,caveTurnX+CAVE_HW, caveHallEndZ,caveStairEndZ, STAIR_RISE, 'cave', null, {mz0:0,mz1:0});
+  // cave red room — no longer the dead end, both z ends open
+  addZone(caveTurnX-CAVE_HW,caveTurnX+CAVE_HW, caveRedEndZ,caveHallEndZ, STAIR_RISE, 'cave',
+    {key:'caveRed',text:'A ROOM SOAKED IN RED'}, {mz0:0,mz1:0});
+  // cave corridor B — open at the -HW end (into the main-hall junction gap)
+  addZone(caveTurnX,-HW, JZ-CAVE_HW,JZ+CAVE_HW, 0, 'cave',
+    {key:'cave',text:'A DAMP PASSAGE, CHAINS OVERHEAD'}, {mx1:0});
+  // boiler stairs
+  addZone(boilTurnX-BOIL_HW,boilTurnX+BOIL_HW, boilStairEndZ,JZ,
+    (cx,cz)=>-((JZ-cz)/STAIR_LEN)*STAIR_RISE, 'boiler', {key:'boilStairs',text:'THE PASSAGE DESCENDS'}, {mz0:0,mz1:0});
+  // boiler hallway E
+  addZone(boilTurnX-BOIL_HW,boilTurnX+BOIL_HW, boilHallEndZ,boilStairEndZ, -STAIR_RISE, 'boiler', null, {mz0:0,mz1:0});
+  // boiler red room — no longer the dead end, both z ends open
+  addZone(boilTurnX-BOIL_HW,boilTurnX+BOIL_HW, boilRedEndZ,boilHallEndZ, -STAIR_RISE, 'boiler',
+    {key:'boilRed',text:'A ROOM SOAKED IN RED'}, {mz0:0,mz1:0});
+  // boiler corridor D — open at the HW end (into the main-hall junction gap)
+  addZone(HW,boilTurnX, JZ-BOIL_HW,JZ+BOIL_HW, 0, 'boiler',
+    {key:'boiler',text:'METAL GROANS AROUND YOU'}, {mx0:0});
+
   function resolvePosition(nx,nz){
-    // obsidian chamber (flat continuation past the bottom of the center descent)
-    if(inRect(nx,nz, -OBSID_HW, OBSID_HW, obsidEndZ, centerEndZ)){
-      const cx=Math.max(-OBSID_HW+M, Math.min(OBSID_HW-M, nx));
-      const cz=Math.max(obsidEndZ+M, Math.min(centerEndZ, nz));
-      showHint('obsidian','THE STONE HERE DRINKS THE LIGHT');
-      return {x:cx, z:cz, y:-1.8, zone:'obsidian'};
-    }
-    // center corridor (new descending passage from junction)
-    if(inRect(nx,nz, -centerHW, centerHW, centerEndZ, JZ)){
-      const cx=Math.max(-centerHW+M, Math.min(centerHW-M, nx));
-      const cz=Math.max(centerEndZ, Math.min(JZ, nz));
-      const frac=(JZ-cz)/CENTER_LEN;
-      showHint('center','A DARK PATH DESCENDS');
-      return {x:cx, z:cz, y:-frac*1.8, zone:'center'};
-    }
-    // flooded crypt (branches off JZ3, right side)
-    if(inRect(nx,nz, HW, cryptTurnX, JZ3-CRYPT_HW, JZ3+CRYPT_HW)){
-      const cx=Math.max(HW,Math.min(cryptTurnX-M,nx));
-      const cz=Math.max(JZ3-CRYPT_HW+M,Math.min(JZ3+CRYPT_HW-M,nz));
-      showHint('crypt','COLD WATER CLOSES AROUND YOUR ANKLES');
-      return {x:cx,z:cz,y:0,zone:'crypt'};
-    }
-    // cave stairs (up)
-    if(inRect(nx,nz, caveTurnX-CAVE_HW, caveTurnX+CAVE_HW, caveStairEndZ, JZ)){
-      const cx=Math.max(caveTurnX-CAVE_HW+M,Math.min(caveTurnX+CAVE_HW-M,nx));
-      const cz=Math.max(caveStairEndZ,Math.min(JZ,nz));
-      const frac=(JZ-cz)/STAIR_LEN;
-      showHint('caveStairs','THE PASSAGE CLIMBS');
-      return {x:cx,z:cz,y:frac*STAIR_RISE,zone:'cave'};
-    }
-    // cave hallway C (far) — no margin at its far end anymore, since the red
-    // room continues straight past it (margin there would wall off the doorway,
-    // same mistake as the junction dead-zone bug)
-    if(inRect(nx,nz, caveTurnX-CAVE_HW, caveTurnX+CAVE_HW, caveHallEndZ, caveStairEndZ)){
-      const cx=Math.max(caveTurnX-CAVE_HW+M,Math.min(caveTurnX+CAVE_HW-M,nx));
-      const cz=Math.max(caveHallEndZ,Math.min(caveStairEndZ,nz));
-      return {x:cx,z:cz,y:STAIR_RISE,zone:'cave'};
-    }
-    // cave red room (new dead end — margin only applies at its own far wall)
-    if(inRect(nx,nz, caveTurnX-CAVE_HW, caveTurnX+CAVE_HW, caveRedEndZ, caveHallEndZ)){
-      const cx=Math.max(caveTurnX-CAVE_HW+M,Math.min(caveTurnX+CAVE_HW-M,nx));
-      const cz=Math.max(caveRedEndZ+M,Math.min(caveHallEndZ,nz));
-      showHint('caveRed','A ROOM SOAKED IN RED');
-      return {x:cx,z:cz,y:STAIR_RISE,zone:'cave'};
-    }
-    // cave corridor B
-    if(inRect(nx,nz, caveTurnX, -HW, JZ-CAVE_HW, JZ+CAVE_HW)){
-      const cx=Math.max(caveTurnX+M,Math.min(-HW,nx));
-      const cz=Math.max(JZ-CAVE_HW+M,Math.min(JZ+CAVE_HW-M,nz));
-      showHint('cave','A DAMP PASSAGE, CHAINS OVERHEAD');
-      return {x:cx,z:cz,y:0,zone:'cave'};
-    }
-    // boiler stairs (down)
-    if(inRect(nx,nz, boilTurnX-BOIL_HW, boilTurnX+BOIL_HW, boilStairEndZ, JZ)){
-      const cx=Math.max(boilTurnX-BOIL_HW+M,Math.min(boilTurnX+BOIL_HW-M,nx));
-      const cz=Math.max(boilStairEndZ,Math.min(JZ,nz));
-      const frac=(JZ-cz)/STAIR_LEN;
-      showHint('boilStairs','THE PASSAGE DESCENDS');
-      return {x:cx,z:cz,y:-frac*STAIR_RISE,zone:'boiler'};
-    }
-    // boiler hallway E (far) — same open-doorway fix as the cave side
-    if(inRect(nx,nz, boilTurnX-BOIL_HW, boilTurnX+BOIL_HW, boilHallEndZ, boilStairEndZ)){
-      const cx=Math.max(boilTurnX-BOIL_HW+M,Math.min(boilTurnX+BOIL_HW-M,nx));
-      const cz=Math.max(boilHallEndZ,Math.min(boilStairEndZ,nz));
-      return {x:cx,z:cz,y:-STAIR_RISE,zone:'boiler'};
-    }
-    // boiler red room (new dead end)
-    if(inRect(nx,nz, boilTurnX-BOIL_HW, boilTurnX+BOIL_HW, boilRedEndZ, boilHallEndZ)){
-      const cx=Math.max(boilTurnX-BOIL_HW+M,Math.min(boilTurnX+BOIL_HW-M,nx));
-      const cz=Math.max(boilRedEndZ+M,Math.min(boilHallEndZ,nz));
-      showHint('boilRed','A ROOM SOAKED IN RED');
-      return {x:cx,z:cz,y:-STAIR_RISE,zone:'boiler'};
-    }
-    // boiler corridor D
-    if(inRect(nx,nz, HW, boilTurnX, JZ-BOIL_HW, JZ+BOIL_HW)){
-      const cx=Math.max(HW,Math.min(boilTurnX-M,nx));
-      const cz=Math.max(JZ-BOIL_HW+M,Math.min(JZ+BOIL_HW-M,nz));
-      showHint('boiler','METAL GROANS AROUND YOU');
-      return {x:cx,z:cz,y:0,zone:'boiler'};
+    for(let i=0;i<zones.length;i++){
+      const zn=zones[i];
+      if(nx>=zn.x0-0.001 && nx<=zn.x1+0.001 && nz>=zn.z0-0.001 && nz<=zn.z1+0.001){
+        const cx=Math.max(zn.x0+zn.mx0, Math.min(zn.x1-zn.mx1, nx));
+        const cz=Math.max(zn.z0+zn.mz0, Math.min(zn.z1-zn.mz1, nz));
+        const y = typeof zn.elev==='function' ? zn.elev(cx,cz) : zn.elev;
+        if(zn.hint) showHint(zn.hint.key, zn.hint.text);
+        return {x:cx, z:cz, y, zone:zn.zone};
+      }
     }
     // default: main hall A
     // near the junction the side walls have a gap (no inner wall there) so the
@@ -1164,24 +1475,14 @@
     osc.connect(gain); gain.connect(ctx.destination);
     osc.start(now); osc.stop(now+duration);
   }
-  function dissonantDrone(ctx, dur){
-    if(!ctx)return;
-    const now=ctx.currentTime;
-    for(const f of [95, 142, 213]){
-      const osc=ctx.createOscillator(), gain=ctx.createGain();
-      osc.type='sawtooth'; osc.frequency.setValueAtTime(f, now);
-      gain.gain.setValueAtTime(0.03, now); gain.gain.linearRampToValueAtTime(0, now+dur);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(now); osc.stop(now+dur);
-    }
-  }
   try{ var audioCtx=new(window.AudioContext||window.webkitAudioContext)(); } catch(e){ var audioCtx=null; }
   let lastScareTime=0;
-  const scareSoundCooldown=0.6; // min time between scare sounds
-  let shadowEncounterTime=0;
+  // periodic jump scare — first one fires 20-40s in, then every 45-90s after
+  let nextScareAt = 20 + Math.random()*20;
 
   // ---- scripted jump scare: a bright flash overlay + a loud dissonant
-  // stinger, fired once by the obsidian-chamber stalker figure ----
+  // stinger. Used to be fired once by the obsidian-chamber stalker figure;
+  // now fires on a randomized periodic timer during play (see animate()). ----
   let jumpScareFlash=0;
   const scareFlashEl=document.getElementById('scareFlash');
   function triggerJumpScare(){
@@ -1210,6 +1511,7 @@
     for(let i=0;i<w*h;i++){const v=Math.random()*255;d[i*4]=d[i*4+1]=d[i*4+2]=v;d[i*4+3]=255;}gctx.putImageData(img,0,0);}
 
   let curZone='hall';
+  let lastAutosave=0;
   function animate(){
     requestAnimationFrame(animate);
     const dt=Math.min(0.05,clock.getDelta()), t=clock.elapsedTime;
@@ -1235,6 +1537,7 @@
       let mx=0,mz=0;
       if(keys['w']||keys['arrowup'])mz+=1; if(keys['s']||keys['arrowdown'])mz-=1;
       if(keys['a']||keys['arrowleft'])mx-=1; if(keys['d']||keys['arrowright'])mx+=1;
+      if(isTouch){ mx+=touchMoveVec.x; mz+=touchMoveVec.z; }
       const len=Math.hypot(mx,mz)||1; mx/=len;mz/=len;
       const sinY=Math.sin(player.yaw),cosY=Math.cos(player.yaw);
       const nx = player.x + (mx*cosY - mz*sinY)*sp;
@@ -1246,10 +1549,19 @@
       // head bob
       const moving=(mx||mz);
       if(moving) bob+=dt*10*run;
-      camera.position.set(player.x,player.elev+EYE+Math.sin(bob)*0.06,player.z);
+      // space-bar jump: vertical velocity on press (only while grounded),
+      // gravity pulls back down, lands back on the current floor elevation
+      // (player.elev, from resolvePosition — so jumping still tracks stairs/slopes).
+      if(keys[' '] && player.grounded){ player.vy=5.4; player.grounded=false; }
+      player.vy-=15*dt;
+      player.airY+=player.vy*dt;
+      if(player.airY<=0){ player.airY=0; player.vy=0; player.grounded=true; }
+      camera.position.set(player.x,player.elev+player.airY+EYE+Math.sin(bob)*0.06,player.z);
       camera.rotation.set(player.pitch,player.yaw,0);
+      // light autosave so "Resume Saved Game" stays reasonably fresh
+      if(t-lastAutosave>10){ lastAutosave=t; writeSave(); }
     } else {
-      camera.position.set(player.x,player.elev+EYE,player.z);
+      camera.position.set(player.x,player.elev+player.airY+EYE,player.z);
       camera.rotation.set(player.pitch,player.yaw,0);
     }
 
@@ -1298,55 +1610,12 @@
     for(let i=0;i<EN;i++){ea[i*3+1]+=ev[i]*dt; ea[i*3]+=Math.sin(t*1.5+i)*dt*0.15; if(ea[i*3+1]>H){ea[i*3+1]=0;ea[i*3]=(Math.random()-.5)*HW*2;ea[i*3+2]=2.5-Math.random()*LEN;}}
     egeo.attributes.position.needsUpdate=true;
 
-    // shadow figure animation — behavior depends on type:
-    //  walker  — patrols back and forth along its assigned line
-    //  watcher — stands still, slowly turns to face an approaching player
-    //  stalker — stands still until the player is close, then fires once
-    for(const sf of shadowFigures){
-      if(sf.type==='watcher'){
-        const dist0=Math.hypot(player.x-sf.x, player.z-sf.z);
-        if(dist0<11){
-          const targetAngle=Math.atan2(player.x-sf.x, player.z-sf.z);
-          let da=targetAngle-sf.grp.rotation.y;
-          da=Math.atan2(Math.sin(da),Math.cos(da)); // shortest-path angle wrap
-          sf.grp.rotation.y+=da*Math.min(1,dt*2.2);
-        }
-        sf.grp.position.set(sf.x,2.5,sf.z);
-        sf.armL.rotation.x=Math.sin(t*1.1+sf.phase)*0.05;
-        sf.armR.rotation.x=Math.sin(t*1.0+sf.phase)*0.05;
-        sf.legL.rotation.x=0; sf.legR.rotation.x=0;
-      } else {
-        // walker / stalker: patrol back and forth along the dir vector
-        // (stalker has patrolDist 0, so it just stays put until triggered)
-        if(sf.patrolDist>0){
-          sf.traveled+=sf.dir*sf.speed*dt;
-          if(sf.traveled>sf.patrolDist){ sf.traveled=sf.patrolDist; sf.dir=-1; }
-          if(sf.traveled<0){ sf.traveled=0; sf.dir=1; }
-          sf.x=sf.startX+sf.dirX*sf.traveled;
-          sf.z=sf.startZ+sf.dirZ*sf.traveled;
-          sf.grp.rotation.y=Math.atan2(sf.dirX*sf.dir, sf.dirZ*sf.dir);
-          const armSwing=Math.sin(t*6+sf.phase)*0.35;
-          const legSwing=Math.sin(t*5.5+sf.phase)*0.4;
-          sf.armL.rotation.x=-0.3+armSwing; sf.armR.rotation.x=-0.3-armSwing;
-          sf.legL.rotation.x=-legSwing; sf.legR.rotation.x=legSwing;
-        } else {
-          sf.armL.rotation.x=Math.sin(t*0.8+sf.phase)*0.04;
-          sf.armR.rotation.x=Math.sin(t*0.7+sf.phase)*0.04;
-        }
-        sf.grp.position.set(sf.x,2.5,sf.z);
-      }
-
-      // proximity: dissonant drone for anyone standing near, once per cooldown
-      const dist=Math.hypot(player.x-sf.x, player.z-sf.z);
-      if(dist<4.5 && t-lastScareTime>scareSoundCooldown){
-        if(audioCtx) dissonantDrone(audioCtx, 0.4);
-        lastScareTime=t; shadowEncounterTime=t;
-      }
-      // stalker jump scare — fires once, the first time the player closes in
-      if(sf.type==='stalker' && !sf.triggered && dist<7.5){
-        sf.triggered=true;
-        triggerJumpScare();
-      }
+    // periodic random jump scare — no shadow figures anymore, so this is
+    // purely time-based: fires every ~45-90s (randomized each time) while
+    // actually playing, never while paused/in a menu.
+    if(mode==='play' && t>=nextScareAt){
+      triggerJumpScare();
+      nextScareAt = t + 45 + Math.random()*45;
     }
 
     // jump-scare screen flash decay
@@ -1358,8 +1627,6 @@
     // crypt water — subtle opacity pulse so it reads as unsettled/alive
     for(const wm of cryptWaterMats){ wm.opacity=0.5+Math.sin(t*0.8)*0.08; }
     // obsidian chamber seams pulse like the main gate's
-    for(const sm of obsidSeams){ sm.material.opacity=0.55+Math.sin(t*3.4)*0.3; }
-    obsidGlow.intensity=2.4+Math.sin(t*2.6)*0.6;
 
     // occasional unsettling ambient sounds in deep zones
     if(curZone==='boiler' && player.elev<-1.0 && t-lastScareTime>2.0 && Math.random()<0.005){
@@ -1387,7 +1654,13 @@
   requestAnimationFrame(()=>{ animate(); setTimeout(()=>{loadwrap.style.opacity=0;setTimeout(()=>loadwrap.style.display='none',600);},250); });
   window.__HELL={start:()=>start(), dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}},
     state:()=>({x:player.x,z:player.z,elev:player.elev,zone:curZone,mode:mode}),
-    teleport:(x,z)=>{player.x=x;player.z=z;}};
+    teleport:(x,z)=>{player.x=x;player.z=z;},
+    // testing helpers: list every registered zone's bounding rect/name so a
+    // headless script can teleport to each one's centerpoint and check
+    // state().zone/.elev resolve sensibly.
+    zones:()=>zones.map(z=>({zone:z.zone, x0:z.x0,x1:z.x1,z0:z.z0,z1:z.z1, cx:(z.x0+z.x1)/2, cz:(z.z0+z.z1)/2})),
+    pause:()=>openPause(), resume:()=>resumeGame(), jump:()=>{keys[' ']=true; setTimeout(()=>{keys[' ']=false;},80);},
+    scareNow:()=>triggerJumpScare()};
 })();
 </script>
 <script>
