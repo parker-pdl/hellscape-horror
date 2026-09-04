@@ -91,6 +91,19 @@
     box-shadow:0 0 30px rgba(255,80,0,.2)}
   #minimapClose{margin-top:16px}
 
+  /* cube shard puzzle */
+  #cubeOverlay{position:fixed;inset:0;z-index:22;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(0,0,0,.93);cursor:pointer}
+  #cubeOverlay.hidden{display:none}
+  #cubeOverlayMsg{font-family:'Cinzel';font-weight:800;font-size:min(6vw,30px);color:#d4af37;letter-spacing:.14em;margin-bottom:18px;
+    text-shadow:0 0 24px #ffd700,0 0 60px rgba(255,200,0,.4)}
+  #cubeOverlayFrame{width:min(92vw,720px);height:min(52vw,400px);border:1px solid rgba(212,175,55,.35);border-radius:4px;background:#000}
+  #cubeOverlayHint{margin-top:16px;font-family:'Cinzel';font-size:11px;letter-spacing:.34em;color:rgba(210,170,100,.55)}
+  #cubeHud{position:fixed;top:56px;right:16px;z-index:6;pointer-events:none;display:flex;gap:6px;align-items:center}
+  .cubeHudPiece{width:16px;height:16px;border-radius:2px;border:1.5px solid rgba(212,175,55,.4);
+    background:rgba(10,5,2,.7);transition:background .5s,box-shadow .5s}
+  .cubeHudPiece.collected{background:linear-gradient(135deg,#b8961e,#f0e060);box-shadow:0 0 10px #ffd700}
+
   /* mobile touch controls */
   #touchControls{position:fixed;inset:0;z-index:7;pointer-events:none;display:none}
   #touchControls.active{display:block}
@@ -171,6 +184,16 @@
   <button class="pauseBtn" id="minimapClose" style="width:180px">Close</button>
 </div>
 
+<div id="cubeOverlay" class="hidden">
+  <div id="cubeOverlayMsg">SHARD FOUND</div>
+  <iframe id="cubeOverlayFrame" src="" allowfullscreen></iframe>
+  <div id="cubeOverlayHint">TAP / CLICK ANYWHERE TO CONTINUE</div>
+</div>
+<div id="cubeHud">
+  <div class="cubeHudPiece" id="cubeHud0" title="Shard I"></div>
+  <div class="cubeHudPiece" id="cubeHud1" title="Shard II"></div>
+  <div class="cubeHudPiece" id="cubeHud2" title="Shard III"></div>
+</div>
 <button id="touchPause" aria-label="Pause">☰</button>
 <div id="touchControls">
   <div id="touchMove"><div id="touchStick"><div class="knob"></div></div></div>
@@ -766,6 +789,47 @@
   // 'spike' — a brief pain flash + stinger sound on entry, with a cooldown
   //           so it doesn't spam while the player lingers.
   const hazards=[]; // {x,z,r,type,world:THREE.Group (for converting local->world), lastHit}
+
+  // ===== CUBE SHARD PUZZLE =====
+  const SHARD_DATA=[
+    {wx:0.8,  wy:0.55, wz:-18,   url:'https://TODO_SHARD_1.pages.dev/', label:'FIRST SHARD',  hint:'THE DESCENT DEEPENS'},
+    {wx:20.2, wy:0.55, wz:-42.5, url:'https://TODO_SHARD_2.pages.dev/', label:'SECOND SHARD', hint:'THE FIRE CALLS YOU BACK'},
+    {wx:-30.6,wy:4.0,  wz:-64.5, url:'https://TODO_SHARD_3.pages.dev/', label:'THIRD SHARD',  hint:'RETURN — WHERE IT BEGAN'},
+  ];
+  const shardCollected=[false,false,false];
+  const shardMeshGrps=[]; const shardPLights=[];
+  const cubeHudEls=[0,1,2].map(i=>document.getElementById('cubeHud'+i));
+  const cubeOverlayEl=document.getElementById('cubeOverlay');
+  const cubeOverlayFrameEl=document.getElementById('cubeOverlayFrame');
+  const cubeOverlayMsgEl=document.getElementById('cubeOverlayMsg');
+  let shardPickupTime=-10; let puzzleComplete=false;
+  (function(){
+    const geo=new THREE.OctahedronGeometry(0.26,0);
+    SHARD_DATA.forEach((pd,i)=>{
+      const mat=new THREE.MeshStandardMaterial({color:0xede0a0,emissive:0xc89500,emissiveIntensity:1.0,metalness:0.9,roughness:0.14});
+      const grp=new THREE.Group();
+      grp.position.set(pd.wx,pd.wy,pd.wz);
+      const mesh=new THREE.Mesh(geo,mat); mesh.castShadow=true; grp.add(mesh);
+      const pl=new THREE.PointLight(0xffd060,1.5,6,2); grp.add(pl);
+      scene.add(grp);
+      shardMeshGrps.push(grp); shardPLights.push(pl);
+    });
+  })();
+  function showShardOverlay(idx){
+    const pd=SHARD_DATA[idx];
+    cubeOverlayMsgEl.textContent=pd.label+' FOUND';
+    cubeOverlayFrameEl.src=pd.url;
+    cubeOverlayEl.classList.remove('hidden');
+    mode='cutscene';
+    if(showShardOverlay._t) clearTimeout(showShardOverlay._t);
+    showShardOverlay._t=setTimeout(dismissShardOverlay, 8000);
+  }
+  function dismissShardOverlay(){
+    cubeOverlayEl.classList.add('hidden');
+    cubeOverlayFrameEl.src='';
+    if(mode==='cutscene') mode='play';
+  }
+  cubeOverlayEl.addEventListener('click', dismissShardOverlay);
   function addHazard(worldX, worldZ, r, type){
     hazards.push({x:worldX, z:worldZ, r, type, lastHit:-999});
   }
@@ -1595,6 +1659,8 @@
     lastScareTime=clock?clock.elapsedTime:0;
   }
 
+  // ===== end CUBE SHARD PUZZLE setup =====
+
   // ---------------- loop ----------------
   const fwd=new THREE.Vector3(), fq=new THREE.Vector3();
   const clock=new THREE.Clock(); let bob=0, gtex=0;
@@ -1650,6 +1716,22 @@
       player.x=res.x; player.z=res.z; player.elev=res.y; curZone=res.zone;
       // reached gate? (only true when actually in the main hall near its far wall)
       if(curZone==='hall' && player.z<ZEND+2.7){ endGame('THE GATE','it will not open… not yet'); }
+      // cube shard pickups
+      if(t-shardPickupTime>1.5){
+        for(let _si=0;_si<3;_si++){
+          if(shardCollected[_si]) continue;
+          const _sd=SHARD_DATA[_si];
+          if(Math.hypot(player.x-_sd.wx, player.z-_sd.wz)<1.6){
+            shardCollected[_si]=true; shardPickupTime=t;
+            shardMeshGrps[_si].visible=false;
+            if(cubeHudEls[_si]) cubeHudEls[_si].classList.add('collected');
+            showShardOverlay(_si); break;
+          }
+        }
+        if(!puzzleComplete && shardCollected.every(Boolean) && player.z>1.2 && curZone==='hall'){
+          puzzleComplete=true; endGame('THE PUZZLE BOX AWAKENS','three shards reunited — the gate cracks open');
+        }
+      }
       // head bob
       const moving=(mx||mz);
       if(moving) bob+=dt*10*run;
@@ -1693,6 +1775,14 @@
 
     // hanging chains sway gently
     for(const c of chainGroups){ c.rotation.z=Math.sin(t*0.7+c.position.x*3+c.position.z)*0.035; c.rotation.x=Math.sin(t*0.55+c.position.z*2)*0.02; }
+    for(let _si=0;_si<3;_si++){
+      if(shardCollected[_si]) continue;
+      const _sg=shardMeshGrps[_si]; const _sd=SHARD_DATA[_si];
+      _sg.children[0].rotation.y=t*1.3+_si*2.1;
+      _sg.children[0].rotation.x=t*0.6+_si*1.0;
+      _sg.position.y=_sd.wy+Math.sin(t*1.7+_si*1.8)*0.14;
+      shardPLights[_si].intensity=1.2+Math.sin(t*3.0+_si*0.9)*0.5;
+    }
 
     // steam puffs rise and fade back to the floor
     for(const S of steamSystems){
