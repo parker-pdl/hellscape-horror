@@ -124,6 +124,14 @@
   <div class="sub">D E S C E N D   I F   Y O U   D A R E</div>
   <button class="enter" id="enterBtn">▾ DESCEND ▾</button>
   <div class="ctrls">W A S D — MOVE&nbsp;&nbsp;·&nbsp;&nbsp;LEFT / RIGHT ARROWS — TURN&nbsp;&nbsp;·&nbsp;&nbsp;UP / DOWN ARROWS — MOVE&nbsp;&nbsp;·&nbsp;&nbsp;SHIFT — RUN&nbsp;&nbsp;·&nbsp;&nbsp;ESC — PAUSE</div>
+  <div style="margin-top:18px;min-height:50px;text-align:center;overflow:hidden">
+    <ins class="adsbygoogle"
+         style="display:inline-block;width:320px;height:50px"
+         data-ad-client="ca-pub-2328685696786328"
+         data-ad-slot="auto"
+         data-full-width-responsive="true"></ins>
+    <script>(adsbygoogle=window.adsbygoogle||[]).push({});</script>
+  </div>
 </div>
 <div id="endscreen" class="screen hidden">
   <div class="title" id="endtitle" style="font-size:min(9vw,64px)">THE GATE</div>
@@ -142,6 +150,14 @@
     <button class="pauseBtn" id="btnSettings">Settings</button>
     <button class="pauseBtn" id="btnQuit">Quit to Title</button>
     <div class="pauseSub" id="pauseSaveInfo"></div>
+    <div style="margin-top:10px;min-height:50px;text-align:center;overflow:hidden">
+      <ins class="adsbygoogle"
+           style="display:inline-block;width:320px;height:50px"
+           data-ad-client="ca-pub-2328685696786328"
+           data-ad-slot="auto"
+           data-full-width-responsive="true"></ins>
+      <script>(adsbygoogle=window.adsbygoogle||[]).push({});</script>
+    </div>
   </div>
   <div class="pausePanel" id="settingsPanel" style="display:none">
     <div class="pauseTitle" style="font-size:20px">SETTINGS</div>
@@ -437,6 +453,14 @@
 
   const floor=new THREE.Mesh(new THREE.PlaneGeometry(HW*2,LEN), stoneMat([3,10],0x6b5442));
   floor.rotation.x=-Math.PI/2; floor.position.set(0,0,2.5-LEN/2); floor.receiveShadow=true; g.add(floor);
+  const hallHoleMat=new THREE.MeshBasicMaterial({color:0x060402});
+  const hallHoleZs=[-8,-16,-25,-34,-48,-55];
+  for(const hz of hallHoleZs){
+    const hr=0.3+Math.random()*0.55;
+    const hh=new THREE.Mesh(new THREE.CircleGeometry(hr,14), hallHoleMat);
+    hh.rotation.x=-Math.PI/2; hh.position.set((Math.random()-.5)*5.0, 0.01, hz);
+    g.add(hh);
+  }
   const ceil=new THREE.Mesh(new THREE.PlaneGeometry(HW*2,LEN), stoneMat([3,10],0x2a1c14));
   ceil.rotation.x=Math.PI/2; ceil.position.set(0,H,2.5-LEN/2); ceil.receiveShadow=true; g.add(ceil);
 
@@ -908,6 +932,12 @@
     new THREE.MeshBasicMaterial({map:floorCrackTex(), transparent:true, opacity:.3, depthWrite:false}));
   boilCrackFloor.rotation.x=-Math.PI/2; boilCrackFloor.position.set(0,0.04,BOIL_LEN/2);
   boilCorridorGrp.add(boilCrackFloor);
+  const boilHoleMat=new THREE.MeshBasicMaterial({color:0x120602});
+  for(let i=0;i<5;i++){
+    const bh=new THREE.Mesh(new THREE.CircleGeometry(0.4+Math.random()*0.5,12), boilHoleMat);
+    bh.rotation.x=-Math.PI/2; bh.position.set((Math.random()-.5)*6.0, 0.01, BOIL_LEN*(0.12+i*0.18));
+    boilCorridorGrp.add(bh);
+  }
 
   // --- boiler wing continues past the hallway into a blank red room too ---
   const boilRedGrp = buildSegment({x:boilTurnX,y:-STAIR_RISE,z:boilHallEndZ}, 0, REDE_LEN, 0, BOIL_HW, BOIL_H, redMat,
@@ -977,10 +1007,11 @@
   centerCorrGrp.add(crackFloor);
   // floor holes showing the abyss below (simple dark cutouts)
   const holeMat=new THREE.MeshBasicMaterial({color:0x0a0605});
-  for(let i=0;i<3;i++){
-    const holeZ=CENTER_LEN*(0.15+i*0.32);
-    const hole=new THREE.Mesh(new THREE.CircleGeometry(0.8+Math.random()*0.6, 16), holeMat);
-    hole.rotation.x=-Math.PI/2; hole.position.set((Math.random()-.5)*4.0, 0.01, holeZ);
+  for(let i=0;i<7;i++){
+    const holeZ=CENTER_LEN*(0.08+i*0.13);
+    const hr=0.5+Math.random()*0.9;
+    const hole=new THREE.Mesh(new THREE.CircleGeometry(hr, 16), holeMat);
+    hole.rotation.x=-Math.PI/2; hole.position.set((Math.random()-.5)*3.8, 0.01, holeZ);
     centerCorrGrp.add(hole);
   }
   // eerie lights and creeping shadows
@@ -1074,10 +1105,11 @@
       {run:12, heading:3, obst:'box',    torch: 1, tint:0x2e2a22, hint:'THE PASSAGE TURNS'},
       {run:14, heading:0, obst:'barrel', torch:-1, tint:0x3a3428, hint:null},
       {run:12, heading:1, obst:'debris', torch: 1, tint:0x282420, hint:'IT BENDS BACK AGAIN'},
-      {run:18, heading:0, obst:'box',    torch:-1, tint:0x201c17, hint:'A DEAD END, SEALED', final:true},
+      {run:18, heading:0, obst:'box',    torch:-1, tint:0x201c17, hint:'SOMETHING DEEPER CALLS'},
     ];
+    let caveExtCur={x:caveTurnX, y:STAIR_RISE, z:caveRedEndZ};
     specs.forEach((sp,idx)=>{
-      addWingRoom(cur, sp.heading, sp.run, CAVE_HW, CAVE_H, caveMat,
+      addWingRoom(caveExtCur, sp.heading, sp.run, CAVE_HW, CAVE_H, caveMat,
         {floor:sp.tint, ceil:0x121614, wall:sp.tint},
         'cave', sp.hint?{key:'caveExt'+idx,text:sp.hint}:null,
         (grp,run,hw,h)=>{
@@ -1085,6 +1117,51 @@
           if(sp.final) sealWingEnd(grp,run,hw,h,0x9a9a9a);
         }, !!sp.final);
     });
+    const SHAFT_HW=0.82, SHAFT_H=3.4, SHAFT_RUN=56;
+    const GRAND_HW=8.6, GRAND_H=11.5, GRAND_RUN=22;
+    const shaftGrp = buildSegment(
+      {x:caveExtCur.x, y:caveExtCur.y, z:caveExtCur.z},
+      0, SHAFT_RUN, 0, SHAFT_HW, SHAFT_H, stoneMat,
+      {floor:0x0e0b07, ceil:0x07060a, wall:0x110e0c}
+    );
+    for(let i=0;i<9;i++){
+      const shHz=SHAFT_RUN*(0.05+i*0.105);
+      const shHr=0.10+Math.random()*0.18;
+      const shHole=new THREE.Mesh(new THREE.CircleGeometry(shHr,8), holeMat);
+      shHole.rotation.x=-Math.PI/2; shHole.position.set((Math.random()-.5)*0.9, 0.01, shHz);
+      shaftGrp.add(shHole);
+    }
+    for(let ti=0;ti<4;ti++){
+      addTorch(shaftGrp,(ti%2?1:-1)*(SHAFT_HW-0.22), SHAFT_H*0.52, SHAFT_RUN*(0.12+ti*0.24), ti%2?1:-1, 0x6020a8);
+    }
+    scatterBloodWalls(shaftGrp, 0, SHAFT_RUN, SHAFT_HW, SHAFT_H, 6);
+    const shaftEndX=caveExtCur.x, shaftEndY=caveExtCur.y, shaftEndZ=caveExtCur.z-SHAFT_RUN;
+    addZone(shaftEndX-SHAFT_HW, shaftEndX+SHAFT_HW, shaftEndZ, caveExtCur.z, shaftEndY, 'cave',
+      {key:'narrowShaft', text:'THE WALLS CRUSH INWARD — DO NOT STOP'},{mx0:ZM, mx1:ZM, mz0:0, mz1:0});
+    const grandGrp = buildSegment(
+      {x:shaftEndX, y:shaftEndY, z:shaftEndZ},
+      3, GRAND_RUN, 0, GRAND_HW, GRAND_H, stoneMat,
+      {floor:0x130a0e, ceil:0x07040b, wall:0x1c0f18}
+    );
+    for(let i=0;i<6;i++){
+      const grandPL=new THREE.PointLight(i%2?0xb02050:0x6010b0, 1.4, 28, 2);
+      grandPL.position.set((i%2?-1:1)*5.2, GRAND_H-1.8, GRAND_RUN*(0.08+i*0.18));
+      grandGrp.add(grandPL); torchLights.push({pl:grandPL, base:1.4});
+    }
+    const grandHoleMat=new THREE.MeshBasicMaterial({color:0x040109});
+    for(let i=0;i<6;i++){
+      const ghr=0.9+Math.random()*2.1;
+      const gh=new THREE.Mesh(new THREE.CircleGeometry(ghr,16), grandHoleMat);
+      gh.rotation.x=-Math.PI/2; gh.position.set((Math.random()-.5)*13.0, 0.01, GRAND_RUN*(0.1+i*0.15));
+      grandGrp.add(gh);
+    }
+    for(let i=1;i<=6;i++) addChain(grandGrp,(i%2?-1:1)*(GRAND_HW-1.2),i*(GRAND_RUN/7),GRAND_H,3.2+Math.random()*1.4,0x7a3a6a);
+    for(let i=0;i<7;i++) addObstacle(grandGrp,(Math.random()-.5)*15.0,0.4,GRAND_RUN*(0.07+i*0.13),'debris',GRAND_HW);
+    scatterBloodWalls(grandGrp, 0, GRAND_RUN, GRAND_HW, GRAND_H, 10);
+    scatterBloodFloorCeil(grandGrp, 0, GRAND_RUN, GRAND_HW, GRAND_H, 7, 5);
+    addEndDoor(grandGrp, GRAND_RUN, GRAND_HW, GRAND_H, doorBoxTex);
+    addZone(shaftEndX-GRAND_RUN, shaftEndX+SHAFT_HW, shaftEndZ-GRAND_HW, shaftEndZ+GRAND_HW,
+      shaftEndY, 'cave',{key:'grandChamber', text:'A VAST DARKNESS SWALLOWS THE LIGHT'},{mx0:ZM, mx1:0, mz0:ZM, mz1:ZM});
   }
 
   // --- boiler-side extension (5 rooms, 2 turns) ---
