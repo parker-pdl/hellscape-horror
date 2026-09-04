@@ -103,6 +103,10 @@
   .cubeHudPiece{width:16px;height:16px;border-radius:2px;border:1.5px solid rgba(212,175,55,.4);
     background:rgba(10,5,2,.7);transition:background .5s,box-shadow .5s}
   .cubeHudPiece.collected{background:linear-gradient(135deg,#b8961e,#f0e060);box-shadow:0 0 10px #ffd700}
+  #countdownHud{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:6;pointer-events:none;font-family:'Cinzel';font-weight:800;font-size:22px;letter-spacing:.18em;color:#d4af37;text-shadow:0 0 12px rgba(255,200,0,.5);display:none}
+  #countdownHud.active{display:block}
+  #countdownHud.urgent{color:#ff4444;text-shadow:0 0 16px rgba(255,50,50,.7);animation:pulseRed 0.5s ease-in-out infinite alternate}
+  @keyframes pulseRed{from{opacity:1}to{opacity:0.6}}
 
   /* mobile touch controls */
   #touchControls{position:fixed;inset:0;z-index:7;pointer-events:none;display:none}
@@ -194,6 +198,7 @@
   <div class="cubeHudPiece" id="cubeHud1" title="Shard II"></div>
   <div class="cubeHudPiece" id="cubeHud2" title="Shard III"></div>
 </div>
+<div id="countdownHud">5:00</div>
 <button id="touchPause" aria-label="Pause">☰</button>
 <div id="touchControls">
   <div id="touchMove"><div id="touchStick"><div class="knob"></div></div></div>
@@ -803,6 +808,8 @@
   const cubeOverlayFrameEl=document.getElementById('cubeOverlayFrame');
   const cubeOverlayMsgEl=document.getElementById('cubeOverlayMsg');
   let shardPickupTime=-10; let puzzleComplete=false;
+let countdownStart=-1; const COUNTDOWN_SECS=300;
+const countdownHudEl=document.getElementById('countdownHud');
   (function(){
     const geo=new THREE.OctahedronGeometry(0.26,0);
     SHARD_DATA.forEach((pd,i)=>{
@@ -1464,6 +1471,29 @@
       c2.fillRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
       c2.strokeRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
     }
+    // shard markers on minimap
+    for(let _mi=0;_mi<3;_mi++){
+      if(shardCollected[_mi]) continue;
+      const _sd=SHARD_DATA[_mi];
+      const _sp=toPx(_sd.wx,_sd.wz);
+      const _sz=6;
+      c2.fillStyle='#d4af37';
+      c2.strokeStyle='#ffd700'; c2.lineWidth=1.2;
+      c2.beginPath();
+      c2.moveTo(_sp[0],_sp[1]-_sz);
+      c2.lineTo(_sp[0]+_sz,_sp[1]);
+      c2.lineTo(_sp[0],_sp[1]+_sz);
+      c2.lineTo(_sp[0]-_sz,_sp[1]);
+      c2.closePath(); c2.fill(); c2.stroke();
+      c2.fillStyle='rgba(255,215,0,0.85)';
+      c2.font='bold 8px monospace';
+      c2.textAlign='center';
+      c2.fillText(['I','II','III'][_mi],_sp[0],_sp[1]+_sz+9);
+    }
+    // legend
+    c2.font='9px monospace'; c2.textAlign='left';
+    c2.fillStyle='rgba(212,175,55,0.8)'; c2.fillText('\u25c7 shard',4,mm.height-14);
+    c2.fillStyle='rgba(255,217,176,0.8)'; c2.fillText('\u25cf you',4,mm.height-4);
     // player marker + facing (matches the forward-vector sign convention
     // used by the movement code below: forward = (-sin(yaw), -cos(yaw)))
     const pp=toPx(player.x,player.z);
@@ -1722,14 +1752,22 @@
           if(shardCollected[_si]) continue;
           const _sd=SHARD_DATA[_si];
           if(Math.hypot(player.x-_sd.wx, player.z-_sd.wz)<1.6){
-            shardCollected[_si]=true; shardPickupTime=t;
+            shardCollected[_si]=true; shardPickupTime=t; if(countdownStart<0){countdownStart=t; countdownHudEl.classList.add('active');}
             shardMeshGrps[_si].visible=false;
             if(cubeHudEls[_si]) cubeHudEls[_si].classList.add('collected');
             showShardOverlay(_si); break;
           }
         }
         if(!puzzleComplete && shardCollected.every(Boolean) && player.z>1.2 && curZone==='hall'){
-          puzzleComplete=true; endGame('THE PUZZLE BOX AWAKENS','three shards reunited — the gate cracks open');
+          puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); endGame('THE PUZZLE BOX AWAKENS','three shards reunited — the gate cracks open');
+        }
+        // countdown timer
+        if(countdownStart>=0 && !puzzleComplete){
+          const _rem=Math.max(0,COUNTDOWN_SECS-(t-countdownStart));
+          const _mm=Math.floor(_rem/60), _ss=Math.floor(_rem%60);
+          countdownHudEl.textContent=_mm+':'+(('0'+_ss).slice(-2));
+          if(_rem<60) countdownHudEl.classList.add('urgent'); else countdownHudEl.classList.remove('urgent');
+          if(_rem<=0){ puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); endGame('TIME HAS RUN OUT','the puzzle box crumbles to ash'); }
         }
       }
       // head bob
