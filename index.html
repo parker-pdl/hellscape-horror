@@ -197,6 +197,7 @@
   <div class="cubeHudPiece" id="cubeHud0" title="Shard I"></div>
   <div class="cubeHudPiece" id="cubeHud1" title="Shard II"></div>
   <div class="cubeHudPiece" id="cubeHud2" title="Shard III"></div>
+  <div class="cubeHudPiece" id="cubeHud3" title="Shard IV"></div>
 </div>
 <div id="countdownHud">5:00</div>
 <button id="touchPause" aria-label="Pause">☰</button>
@@ -503,6 +504,7 @@
   function sideWallPiece(s,zTop,zBot){ // zTop must be > zBot
     const len=zTop-zBot; if(len<=0.02) return;
     const wmesh=new THREE.Mesh(new THREE.PlaneGeometry(len,H), stoneMat([len/5.8,2],0x5a4636));
+    wmesh.material.side=THREE.DoubleSide;
     wmesh.rotation.y=s*Math.PI/2; wmesh.position.set(s*HW,H/2,(zTop+zBot)/2); wmesh.receiveShadow=true; wmesh.castShadow=true; g.add(wmesh);
   }
   for(const s of [-1,1]){
@@ -594,6 +596,7 @@
     ceilMesh.rotation.x=Math.PI/2; ceilMesh.position.set(0,height,Lslant/2); ceilMesh.receiveShadow=true; group.add(ceilMesh);
     for(const sgn of [-1,1]){
       const wallMesh=new THREE.Mesh(new THREE.PlaneGeometry(Lslant,height), matFn(rep,tints.wall));
+      wallMesh.material.side=THREE.DoubleSide;
       wallMesh.rotation.y=sgn*Math.PI/2; wallMesh.position.set(sgn*halfWidth,height/2,Lslant/2);
       wallMesh.receiveShadow=true; wallMesh.castShadow=true; group.add(wallMesh);
     }
@@ -797,13 +800,14 @@
 
   // ===== CUBE SHARD PUZZLE =====
   const SHARD_DATA=[
-    {wx:0.8,  wy:0.55, wz:-18,   url:'https://TODO_SHARD_1.pages.dev/', label:'FIRST SHARD',  hint:'THE DESCENT DEEPENS'},
-    {wx:20.2, wy:0.55, wz:-42.5, url:'https://TODO_SHARD_2.pages.dev/', label:'SECOND SHARD', hint:'THE FIRE CALLS YOU BACK'},
-    {wx:-30.6,wy:4.0,  wz:-64.5, url:'https://TODO_SHARD_3.pages.dev/', label:'THIRD SHARD',  hint:'RETURN — WHERE IT BEGAN'},
+    {wx:64.0, wy:0.55, wz:-20,    url:'https://TODO_SHARD_1.pages.dev/', label:'FIRST SHARD',  hint:'THE DROWNED KNOW THE WAY'},
+    {wx:30.6, wy:-2.85,wz:-135,   url:'https://TODO_SHARD_2.pages.dev/', label:'SECOND SHARD', hint:'STEAM AND RUIN — THE FURNACE DIES'},
+    {wx:0.0,  wy:-1.25,wz:-120,   url:'https://TODO_SHARD_3.pages.dev/', label:'THIRD SHARD',  hint:'THE ABYSS REFLECTS NOTHING'},
+    {wx:-41.0,wy:3.95, wz:-200.5, url:'https://TODO_SHARD_4.pages.dev/', label:'FOURTH SHARD', hint:'THE GRAND DARKNESS HOLDS ITS BREATH'},
   ];
-  const shardCollected=[false,false,false];
+  const shardCollected=[false,false,false,false];
   const shardMeshGrps=[]; const shardPLights=[];
-  const cubeHudEls=[0,1,2].map(i=>document.getElementById('cubeHud'+i));
+  const cubeHudEls=[0,1,2,3].map(i=>document.getElementById('cubeHud'+i));
   const cubeOverlayEl=document.getElementById('cubeOverlay');
   const cubeOverlayFrameEl=document.getElementById('cubeOverlayFrame');
   const cubeOverlayMsgEl=document.getElementById('cubeOverlayMsg');
@@ -1102,11 +1106,7 @@ const countdownHudEl=document.getElementById('countdownHud');
   // the bottom of the center corridor's descent ----
   const obsidGrp = buildSegment({x:0,y:-1.8,z:centerEndZ}, 0, OBSID_LEN, 0, OBSID_HW, OBSID_H, obsidianMat,
     {floor:0x0a0410, ceil:0x06020a, wall:0x140816});
-  // glassy floor gets its own faint reflection-style highlight strip
-  const obsidAccent=new THREE.Mesh(new THREE.PlaneGeometry(1.2,OBSID_LEN),
-    new THREE.MeshBasicMaterial({color:0x7a1a5a,transparent:true,opacity:.18,depthWrite:false}));
-  obsidAccent.rotation.x=-Math.PI/2; obsidAccent.position.set(0,0.02,OBSID_LEN/2);
-  obsidGrp.add(obsidAccent);
+  // (obsidian floor accent strip removed — solid walls only)
   for(let i=0;i<4;i++){
     const pl=new THREE.PointLight(0xaa2a7a, 1.1, 12, 2);
     pl.position.set((i%2?-1:1)*2.4, OBSID_H-1.2, OBSID_LEN*(i/4.5)+2);
@@ -1759,7 +1759,7 @@ const countdownHudEl=document.getElementById('countdownHud');
           }
         }
         if(!puzzleComplete && shardCollected.every(Boolean) && player.z>1.2 && curZone==='hall'){
-          puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); endGame('THE PUZZLE BOX AWAKENS','three shards reunited — the gate cracks open');
+          puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); endGame('THE PUZZLE BOX AWAKENS','four shards reunited — the gate cracks open');
         }
         // countdown timer
         if(countdownStart>=0 && !puzzleComplete){
