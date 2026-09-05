@@ -1,5 +1,49 @@
 # Hellscape Horror — Changelog
 
+## Session 09-05-2026 — The demon, shard videos, 4th-shard fix
+
+### 1. A real enemy: the demon (demon.glb)
+Parker picked a Mixamo character (Ch10, zombie/demon) and five clips
+(Orc Idle, Zombie Walk, Sad Walk, Start Walking, Holding Walk). Converted
+from 110 MB of FBX to one 3.5 MB .glb (textures 4096→1024, all five
+animations inside) and loaded with three.js r128's GLTFLoader (vendored as
+GLTFLoader.js next to three.min.js, with a CDN fallback).
+
+Behaviour, per Parker's spec:
+- Does not exist until the player holds TWO shards. Then it wakes at
+  whichever end of the main hall is further from the player, with a hint
+  ("SOMETHING HAS WOKEN BELOW") and a low stinger.
+- Hunts the player from then on. Moves through the same resolvePosition()
+  zone system the player uses, so it respects walls and floor heights.
+  When a wall pins it, it wanders for a moment and re-acquires.
+- Slower than the player (2.05 m/s vs 3.2 walk / 5.76 run) but relentless.
+- Reaching the player (within 1.45 m) = a hit: jump-scare flash, red
+  damage vignette, a skull dims in the new top-left HUD, and the demon is
+  shoved back 3 m with a 3.5 s grace period so it cannot chain hits.
+- THREE hits = "IT REACHED YOU" end screen. DESCEND AGAIN after a death
+  does a full run reset (shards back, timer off, demon gone). Ending the
+  run any other way (gate, timer, win) still keeps the old behaviour.
+- Carries a dim red point light and a growl that quickens as it closes in.
+- If demon.glb ever fails to load, the game simply plays without it.
+
+### 2. Shard pickup videos (Parker's request)
+Picking up a shard now plays a short clip in the overlay instead of the
+pages.dev iframe, and the overlay closes itself when the clip ends:
+- Shards I, III, IV → "Hellscape game play.mp4" (R2)
+- Shard II → "shard #2.mp4" (R2)
+Click/tap still skips. A 30 s safety timer closes it if the network stalls.
+
+### 3. Bug fix: the 4th shard could never be picked up
+Two loops were hard-coded to 3 shards (`_si<3`) after the 4th was added, so
+Shard IV never triggered pickup and never animated. Both now use
+SHARD_DATA.length.
+
+### 4. Housekeeping
+- resolvePosition() gained an optional `silent` flag so the demon's
+  movement never fires the player's room hints.
+- sw.js cache bumped to v4 and now pre-caches GLTFLoader.js + demon.glb.
+- Removed a stray `h` typo after the theme-color meta tag.
+
 ## Session 08-08-2026 (later) — Arrow-key turning, reliable Esc/pause, fixed blocked first hallway
 
 Parker reported controls were stuck, Escape didn't open the pause menu, and

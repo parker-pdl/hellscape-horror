@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet"/>
 <link rel="manifest" href="./manifest.webmanifest"/>
-<meta name="theme-color" content="#0b0402"/>h
+<meta name="theme-color" content="#0b0402"/>
 <meta name="description" content="Hellscape Horror — a first-person descent into a burning dungeon. A Parker Data Link game."/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -98,6 +98,8 @@
   #cubeOverlayMsg{font-family:'Cinzel';font-weight:800;font-size:min(6vw,30px);color:#d4af37;letter-spacing:.14em;margin-bottom:18px;
     text-shadow:0 0 24px #ffd700,0 0 60px rgba(255,200,0,.4)}
   #cubeOverlayFrame{width:min(92vw,720px);height:min(52vw,400px);border:1px solid rgba(212,175,55,.35);border-radius:4px;background:#000}
+  #cubeOverlayVideo{width:min(92vw,720px);height:min(52vw,400px);border:1px solid rgba(212,175,55,.35);border-radius:4px;background:#000;object-fit:cover}
+  #cubeOverlayVideo.hidden,#cubeOverlayFrame.hidden{display:none}
   #cubeOverlayHint{margin-top:16px;font-family:'Cinzel';font-size:11px;letter-spacing:.34em;color:rgba(210,170,100,.55)}
   #cubeHud{position:fixed;top:56px;right:16px;z-index:6;pointer-events:none;display:flex;gap:6px;align-items:center}
   .cubeHudPiece{width:16px;height:16px;border-radius:2px;border:1.5px solid rgba(212,175,55,.4);
@@ -107,6 +109,11 @@
   #countdownHud.active{display:block}
   #countdownHud.urgent{color:#ff4444;text-shadow:0 0 16px rgba(255,50,50,.7);animation:pulseRed 0.5s ease-in-out infinite alternate}
   @keyframes pulseRed{from{opacity:1}to{opacity:0.6}}
+  #demonHud{position:fixed;top:56px;left:16px;z-index:6;pointer-events:none;display:none;gap:8px;align-items:center;font-family:'Cinzel';font-weight:800;font-size:18px;letter-spacing:.1em;color:#c0603a;text-shadow:0 0 10px rgba(200,40,0,.6)}
+  #demonHud.active{display:flex}
+  .demonLife{opacity:1;transition:opacity .4s,color .4s}
+  .demonLife.lost{opacity:.18}
+  #demonHud.danger .demonLife:not(.lost){color:#ff3b1f;animation:pulseRed 0.35s ease-in-out infinite alternate}
 
   /* mobile touch controls */
   #touchControls{position:fixed;inset:0;z-index:7;pointer-events:none;display:none}
@@ -191,6 +198,7 @@
 <div id="cubeOverlay" class="hidden">
   <div id="cubeOverlayMsg">SHARD FOUND</div>
   <iframe id="cubeOverlayFrame" src="" allowfullscreen></iframe>
+  <video id="cubeOverlayVideo" playsinline preload="none" class="hidden"></video>
   <div id="cubeOverlayHint">TAP / CLICK ANYWHERE TO CONTINUE</div>
 </div>
 <div id="cubeHud">
@@ -200,6 +208,7 @@
   <div class="cubeHudPiece" id="cubeHud3" title="Shard IV"></div>
 </div>
 <div id="countdownHud">5:00</div>
+<div id="demonHud" title="The demon"><span class="demonLife">&#9760;</span><span class="demonLife">&#9760;</span><span class="demonLife">&#9760;</span></div>
 <button id="touchPause" aria-label="Pause">☰</button>
 <div id="touchControls">
   <div id="touchMove"><div id="touchStick"><div class="knob"></div></div></div>
@@ -208,6 +217,7 @@
 </div>
 
 <script src="./three.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';"></script>
+<script src="./GLTFLoader.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';"></script>
 <script>
 (function(){
   const hasWebGL=(function(){try{const c=document.createElement('canvas');return !!(window.WebGLRenderingContext&&(c.getContext('webgl')||c.getContext('experimental-webgl')));}catch(e){return false;}})();
@@ -800,10 +810,10 @@
 
   // ===== CUBE SHARD PUZZLE =====
   const SHARD_DATA=[
-    {wx:64.0, wy:0.55, wz:-20,    url:'https://hellscape-shard-drowned.pages.dev/', label:'FIRST SHARD',  hint:'THE DROWNED KNOW THE WAY'},
-    {wx:30.6, wy:-2.85,wz:-135,   url:'https://hellscape-shard-furnace.pages.dev/', label:'SECOND SHARD', hint:'STEAM AND RUIN — THE FURNACE DIES'},
-    {wx:0.0,  wy:-1.25,wz:-120,   url:'https://hellscape-shard-abyss.pages.dev/', label:'THIRD SHARD',  hint:'THE ABYSS REFLECTS NOTHING'},
-    {wx:-41.0,wy:3.95, wz:-200.5, url:'https://hellscape-shard-darkness.pages.dev/', label:'FOURTH SHARD', hint:'THE GRAND DARKNESS HOLDS ITS BREATH'},
+    {wx:64.0, wy:0.55, wz:-20,    url:'https://hellscape-shard-drowned.pages.dev/', label:'FIRST SHARD',  hint:'THE DROWNED KNOW THE WAY', video:'https://pub-4a1ee3e926844caba75e0b33d0b2208d.r2.dev/Hellscape%20game%20play.mp4'},
+    {wx:30.6, wy:-2.85,wz:-135,   url:'https://hellscape-shard-furnace.pages.dev/', label:'SECOND SHARD', hint:'STEAM AND RUIN — THE FURNACE DIES', video:'https://pub-4a1ee3e926844caba75e0b33d0b2208d.r2.dev/shard%20%232.mp4'},
+    {wx:0.0,  wy:-1.25,wz:-120,   url:'https://hellscape-shard-abyss.pages.dev/', label:'THIRD SHARD',  hint:'THE ABYSS REFLECTS NOTHING', video:'https://pub-4a1ee3e926844caba75e0b33d0b2208d.r2.dev/Hellscape%20game%20play.mp4'},
+    {wx:-41.0,wy:3.95, wz:-200.5, url:'https://hellscape-shard-darkness.pages.dev/', label:'FOURTH SHARD', hint:'THE GRAND DARKNESS HOLDS ITS BREATH', video:'https://pub-4a1ee3e926844caba75e0b33d0b2208d.r2.dev/Hellscape%20game%20play.mp4'},
   ];
   const shardCollected=[false,false,false,false];
   const shardMeshGrps=[]; const shardPLights=[];
@@ -826,20 +836,38 @@ const countdownHudEl=document.getElementById('countdownHud');
       shardMeshGrps.push(grp); shardPLights.push(pl);
     });
   })();
+  const cubeOverlayVideoEl=document.getElementById('cubeOverlayVideo');
   function showShardOverlay(idx){
     const pd=SHARD_DATA[idx];
     cubeOverlayMsgEl.textContent=pd.label+' FOUND';
-    cubeOverlayFrameEl.src=pd.url;
     cubeOverlayEl.classList.remove('hidden');
     mode='cutscene';
     if(showShardOverlay._t) clearTimeout(showShardOverlay._t);
-    showShardOverlay._t=setTimeout(dismissShardOverlay, 8000);
+    if(pd.video){
+      // short clip: plays once and the overlay closes itself when it ends
+      cubeOverlayFrameEl.classList.add('hidden'); cubeOverlayFrameEl.src='';
+      cubeOverlayVideoEl.classList.remove('hidden');
+      cubeOverlayVideoEl.src=pd.video; cubeOverlayVideoEl.currentTime=0;
+      const pr=cubeOverlayVideoEl.play();
+      if(pr&&pr.catch) pr.catch(()=>{ showShardOverlay._t=setTimeout(dismissShardOverlay, 6000); });
+      // safety net in case 'ended' never fires (stalled network)
+      showShardOverlay._t=setTimeout(dismissShardOverlay, 30000);
+    } else {
+      cubeOverlayVideoEl.classList.add('hidden');
+      cubeOverlayFrameEl.classList.remove('hidden');
+      cubeOverlayFrameEl.src=pd.url;
+      showShardOverlay._t=setTimeout(dismissShardOverlay, 8000);
+    }
   }
   function dismissShardOverlay(){
+    if(showShardOverlay._t){ clearTimeout(showShardOverlay._t); showShardOverlay._t=null; }
     cubeOverlayEl.classList.add('hidden');
     cubeOverlayFrameEl.src='';
+    try{ cubeOverlayVideoEl.pause(); cubeOverlayVideoEl.removeAttribute('src'); cubeOverlayVideoEl.load(); }catch(e){}
     if(mode==='cutscene') mode='play';
   }
+  cubeOverlayVideoEl.addEventListener('ended', dismissShardOverlay);
+  cubeOverlayVideoEl.addEventListener('error', ()=>{ if(mode==='cutscene') setTimeout(dismissShardOverlay, 1500); });
   cubeOverlayEl.addEventListener('click', dismissShardOverlay);
   function addHazard(worldX, worldZ, r, type){
     hazards.push({x:worldX, z:worldZ, r, type, lastHit:-999});
@@ -1364,6 +1392,7 @@ const countdownHudEl=document.getElementById('countdownHud');
 
   function start(){
     if(mode==='play')return;
+    loadDemon();
     introEl.classList.add('hidden'); endEl.classList.add('hidden'); pauseMenu.classList.add('hidden');
     mode='play'; objEl.textContent='Reach the Gate at the end of the hall';
     hudEl.textContent='the fire keeps the dark at bay'; hudEl.style.opacity=1;
@@ -1372,6 +1401,7 @@ const countdownHudEl=document.getElementById('countdownHud');
   }
   document.getElementById('enterBtn').addEventListener('click',start);
   document.getElementById('againBtn').addEventListener('click',()=>{
+    if(runDead) resetRun();
     resetPlayerToSpawn();
     start();
   });
@@ -1614,14 +1644,14 @@ const countdownHudEl=document.getElementById('countdownHud');
   addZone(HW,boilTurnX, JZ-BOIL_HW,JZ+BOIL_HW, 0, 'boiler',
     {key:'boiler',text:'METAL GROANS AROUND YOU'}, {mx0:0});
 
-  function resolvePosition(nx,nz){
+  function resolvePosition(nx,nz,silent){
     for(let i=0;i<zones.length;i++){
       const zn=zones[i];
       if(nx>=zn.x0-0.001 && nx<=zn.x1+0.001 && nz>=zn.z0-0.001 && nz<=zn.z1+0.001){
         const cx=Math.max(zn.x0+zn.mx0, Math.min(zn.x1-zn.mx1, nx));
         const cz=Math.max(zn.z0+zn.mz0, Math.min(zn.z1-zn.mz1, nz));
         const y = typeof zn.elev==='function' ? zn.elev(cx,cz) : zn.elev;
-        if(zn.hint) showHint(zn.hint.key, zn.hint.text);
+        if(zn.hint && !silent) showHint(zn.hint.key, zn.hint.text);
         return {x:cx, z:cz, y, zone:zn.zone};
       }
     }
@@ -1647,7 +1677,7 @@ const countdownHudEl=document.getElementById('countdownHud');
     const hxNeg = inGapZmain ? HW+1.5 : HW-0.9;             // left side: open at JZ only
     const cx=Math.max(-hxNeg,Math.min(hxPos,nx));
     const cz=Math.max(ZEND+2.4,Math.min(3.2,nz));
-    if(cz<JZ+GAPH+2 && cz>JZ-GAPH-2 && !hintShown.junction){ showHint('junction','THE HALL SPLITS — LEFT OR RIGHT'); }
+    if(!silent && cz<JZ+GAPH+2 && cz>JZ-GAPH-2 && !hintShown.junction){ showHint('junction','THE HALL SPLITS — LEFT OR RIGHT'); }
     return {x:cx,z:cz,y:0,zone:'hall'};
   }
 
@@ -1690,6 +1720,135 @@ const countdownHudEl=document.getElementById('countdownHud');
   }
 
   // ===== end CUBE SHARD PUZZLE setup =====
+
+  // ---------------- the demon ----------------
+  // A Mixamo character (demon.glb: mesh + 5 clips) that wakes once the player
+  // holds TWO shards, then hunts them through the wings. It moves through the
+  // same resolvePosition() zones the player uses, so it respects the walls.
+  // Reaching the player three times ends the run. Everything here is
+  // self-contained: if demon.glb fails to load the game simply plays without it.
+  const DEMON_HITS_TO_DIE=3;
+  const DEMON_WAKE_SHARDS=2;
+  const DEMON_SPEED=2.05;            // player walks 3.2, runs 5.76 — slower, but it never stops
+  const DEMON_REACH=1.45;            // metres: counts as "reached you"
+  const DEMON_HIT_COOLDOWN=3.5;      // seconds of grace after a hit
+  const DEMON_SCALE=1.12;
+  const demonHudEl=document.getElementById('demonHud');
+  const demonLifeEls=Array.from(document.querySelectorAll('#demonHud .demonLife'));
+  let demonRoot=null, demonMixer=null, demonClips={}, demonCur=null, demonLoaded=false, demonLoading=false;
+  let demonActive=false, demonHits=0, demonLastHit=-99, runDead=false;
+  let demonWanderAng=0, demonWanderUntil=-1, demonStuckT=0, demonGrowlAt=0;
+  const demonLight=new THREE.PointLight(0xff2a0a,0,7,2); demonLight.visible=false; scene.add(demonLight);
+  const demonPos={x:0,z:0,y:0};
+
+  function loadDemon(){
+    if(demonLoaded||demonLoading||typeof THREE.GLTFLoader==='undefined') return;
+    demonLoading=true;
+    new THREE.GLTFLoader().load('./demon.glb', g=>{
+      demonRoot=g.scene; demonRoot.scale.setScalar(DEMON_SCALE);
+      demonRoot.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=false; o.frustumCulled=false; } });
+      demonMixer=new THREE.AnimationMixer(demonRoot);
+      for(const c of g.animations) demonClips[c.name]=demonMixer.clipAction(c);
+      demonRoot.visible=false; scene.add(demonRoot);
+      demonLoaded=true; demonLoading=false;
+    }, undefined, err=>{ demonLoading=false; console.warn('demon.glb failed to load', err); });
+  }
+  function demonPlay(name, fade){
+    const a=demonClips[name]; if(!a||a===demonCur) return;
+    a.reset().setEffectiveWeight(1).play();
+    if(demonCur) demonCur.crossFadeTo(a, fade||0.35, false);
+    demonCur=a;
+  }
+  function demonSpawn(t){
+    if(!demonLoaded||demonActive) return;
+    // wake up far from the player: the start of the hall or the gate end,
+    // whichever is further away, so the first sighting is a slow approach.
+    const cands=[{x:0,z:1.5},{x:0,z:ZEND+4.5}];
+    let best=cands[0], bd=-1;
+    for(const c of cands){ const d=Math.hypot(player.x-c.x,player.z-c.z); if(d>bd){bd=d;best=c;} }
+    const r=resolvePosition(best.x,best.z,true);
+    demonPos.x=r.x; demonPos.z=r.z; demonPos.y=r.y;
+    demonRoot.position.set(r.x,r.y,r.z); demonRoot.visible=true;
+    demonLight.visible=true;
+    demonActive=true; demonHits=0; demonLastHit=t; demonWanderUntil=-1; demonStuckT=0;
+    demonLifeEls.forEach(e=>e.classList.remove('lost'));
+    demonHudEl.classList.add('active'); demonHudEl.classList.remove('danger');
+    demonPlay('Orc_Idle',0.01);
+    showHint('demonWake','SOMETHING HAS WOKEN BELOW');
+    if(audioCtx) scareSound(audioCtx, 48, 1.2, 'sawtooth');
+  }
+  function demonDespawn(){
+    demonActive=false;
+    if(demonRoot) demonRoot.visible=false;
+    demonLight.visible=false;
+    demonHudEl.classList.remove('active','danger');
+    if(demonCur){ demonCur.stop(); demonCur=null; }
+  }
+  function demonHitPlayer(t){
+    demonHits++; demonLastHit=t;
+    triggerJumpScare();
+    const dmgEl=document.getElementById('dmg'); dmgEl.style.opacity=1; setTimeout(()=>{dmgEl.style.opacity=0;},700);
+    for(let i=0;i<demonLifeEls.length;i++) demonLifeEls[i].classList.toggle('lost', i<demonHits);
+    if(demonHits>=DEMON_HITS_TO_DIE){
+      runDead=true; demonHudEl.classList.remove('danger');
+      endGame('IT REACHED YOU', 'three times the demon laid hands on you — the fire goes out');
+      return;
+    }
+    demonHudEl.classList.add('danger');
+    hudEl.textContent = demonHits===1 ? 'it touched you. keep moving.' : 'one more and the dark takes you';
+    hudEl.style.opacity=1; setTimeout(()=>{hudEl.style.opacity=0;},3500);
+    // shove it back a few metres so it cannot chain hits while you turn
+    const dx=demonPos.x-player.x, dz=demonPos.z-player.z, d=Math.hypot(dx,dz)||1;
+    const r=resolvePosition(demonPos.x+dx/d*3.2, demonPos.z+dz/d*3.2, true);
+    demonPos.x=r.x; demonPos.z=r.z; demonPos.y=r.y;
+  }
+  function demonUpdate(dt,t){
+    if(!demonActive||!demonRoot) return;
+    const dx=player.x-demonPos.x, dz=player.z-demonPos.z, dist=Math.hypot(dx,dz);
+    let moved=false, mvx=0, mvz=0;
+    if(dist<DEMON_REACH){
+      if(t-demonLastHit>DEMON_HIT_COOLDOWN) demonHitPlayer(t);
+    } else {
+      // chase, or wander briefly when a wall has it pinned
+      let ang;
+      if(t<demonWanderUntil) ang=demonWanderAng;
+      else ang=Math.atan2(dx,dz);
+      const step=DEMON_SPEED*dt;
+      const tx=demonPos.x+Math.sin(ang)*step, tz=demonPos.z+Math.cos(ang)*step;
+      const r=resolvePosition(tx,tz,true);
+      mvx=r.x-demonPos.x; mvz=r.z-demonPos.z;
+      const got=Math.hypot(mvx,mvz);
+      demonPos.x=r.x; demonPos.z=r.z; demonPos.y+= (r.y-demonPos.y)*Math.min(1,dt*6);
+      moved = got>step*0.25;
+      if(!moved && t>=demonWanderUntil){ demonStuckT+=dt; } else if(moved && t>=demonWanderUntil){ demonStuckT=0; }
+      if(demonStuckT>0.5){
+        // pinned against a wall — try a fresh direction for a moment
+        demonWanderAng=ang+(Math.random()<0.5?1:-1)*(Math.PI/2+Math.random()*Math.PI/2);
+        demonWanderUntil=t+0.9+Math.random()*0.8; demonStuckT=0;
+      }
+    }
+    demonRoot.position.set(demonPos.x,demonPos.y,demonPos.z);
+    if(moved){ const yaw=Math.atan2(mvx,mvz); demonRoot.rotation.y += (Math.atan2(Math.sin(yaw-demonRoot.rotation.y),Math.cos(yaw-demonRoot.rotation.y)))*Math.min(1,dt*8); }
+    else if(dist<6){ const yaw=Math.atan2(dx,dz); demonRoot.rotation.y += (Math.atan2(Math.sin(yaw-demonRoot.rotation.y),Math.cos(yaw-demonRoot.rotation.y)))*Math.min(1,dt*4); }
+    // pick the clip: relentless shamble when hunting, dragging walk when wandering, idle when boxed in
+    if(!moved) demonPlay('Orc_Idle');
+    else if(t<demonWanderUntil) demonPlay('Sad_Walk');
+    else demonPlay('Zombie_Walk');
+    if(demonMixer) demonMixer.update(dt);
+    demonLight.position.set(demonPos.x,demonPos.y+1.4,demonPos.z);
+    demonLight.intensity=1.2+Math.sin(t*9)*0.4;
+    // low growl that quickens as it closes in
+    if(dist<11 && t>demonGrowlAt){
+      demonGrowlAt=t+Math.max(0.6, dist*0.28);
+      if(audioCtx) scareSound(audioCtx, 42+Math.random()*14, 0.35, 'sawtooth');
+    }
+  }
+  function resetRun(){
+    // full reset after a death: shards back on the floor, timer off, demon gone
+    for(let i=0;i<SHARD_DATA.length;i++){ shardCollected[i]=false; if(shardMeshGrps[i]) shardMeshGrps[i].visible=true; if(cubeHudEls[i]) cubeHudEls[i].classList.remove('collected'); }
+    countdownStart=-1; countdownHudEl.classList.remove('active','urgent'); puzzleComplete=false;
+    demonDespawn(); demonHits=0; runDead=false;
+  }
 
   // ---------------- loop ----------------
   const fwd=new THREE.Vector3(), fq=new THREE.Vector3();
@@ -1748,7 +1907,7 @@ const countdownHudEl=document.getElementById('countdownHud');
       if(curZone==='hall' && player.z<ZEND+2.7){ endGame('THE GATE','it will not open… not yet'); }
       // cube shard pickups
       if(t-shardPickupTime>1.5){
-        for(let _si=0;_si<3;_si++){
+        for(let _si=0;_si<SHARD_DATA.length;_si++){
           if(shardCollected[_si]) continue;
           const _sd=SHARD_DATA[_si];
           if(Math.hypot(player.x-_sd.wx, player.z-_sd.wz)<1.6){
@@ -1759,7 +1918,7 @@ const countdownHudEl=document.getElementById('countdownHud');
           }
         }
         if(!puzzleComplete && shardCollected.every(Boolean) && player.z>1.2 && curZone==='hall'){
-          puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); endGame('THE PUZZLE BOX AWAKENS','four shards reunited — the gate cracks open');
+          puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); demonDespawn(); endGame('THE PUZZLE BOX AWAKENS','four shards reunited — the gate cracks open');
         }
         // countdown timer
         if(countdownStart>=0 && !puzzleComplete){
@@ -1767,9 +1926,12 @@ const countdownHudEl=document.getElementById('countdownHud');
           const _mm=Math.floor(_rem/60), _ss=Math.floor(_rem%60);
           countdownHudEl.textContent=_mm+':'+(('0'+_ss).slice(-2));
           if(_rem<60) countdownHudEl.classList.add('urgent'); else countdownHudEl.classList.remove('urgent');
-          if(_rem<=0){ puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); endGame('TIME HAS RUN OUT','the puzzle box crumbles to ash'); }
+          if(_rem<=0){ puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); demonDespawn(); endGame('TIME HAS RUN OUT','the puzzle box crumbles to ash'); }
         }
       }
+      // the demon wakes once two shards are held, and hunts from then on
+      if(!demonActive && !runDead && shardCollected.filter(Boolean).length>=DEMON_WAKE_SHARDS) demonSpawn(t);
+      demonUpdate(dt,t);
       // head bob
       const moving=(mx||mz);
       if(moving) bob+=dt*10*run;
@@ -1813,7 +1975,7 @@ const countdownHudEl=document.getElementById('countdownHud');
 
     // hanging chains sway gently
     for(const c of chainGroups){ c.rotation.z=Math.sin(t*0.7+c.position.x*3+c.position.z)*0.035; c.rotation.x=Math.sin(t*0.55+c.position.z*2)*0.02; }
-    for(let _si=0;_si<3;_si++){
+    for(let _si=0;_si<SHARD_DATA.length;_si++){
       if(shardCollected[_si]) continue;
       const _sg=shardMeshGrps[_si]; const _sd=SHARD_DATA[_si];
       _sg.children[0].rotation.y=t*1.3+_si*2.1;
