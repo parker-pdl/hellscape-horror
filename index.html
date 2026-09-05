@@ -53,6 +53,13 @@
     padding:15px 40px;border-radius:3px;background:linear-gradient(180deg,#ff8a3a,#c43a10);
     box-shadow:0 0 30px rgba(255,80,0,.55),inset 0 0 0 1px rgba(255,220,180,.25);transition:transform .15s,box-shadow .2s}
   .enter:hover{transform:translateY(-2px);box-shadow:0 0 46px rgba(255,90,0,.85)}
+  .enter.ghost{margin-top:14px;font-size:12px;padding:10px 26px;color:#e6b48a;background:rgba(20,8,4,.75);box-shadow:inset 0 0 0 1px rgba(255,140,80,.45)}
+  .enter.ghost:hover{box-shadow:inset 0 0 0 1px rgba(255,170,110,.9),0 0 18px rgba(255,90,0,.35)}
+  #trailerOverlay{position:fixed;inset:0;z-index:24;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.94)}
+  #trailerOverlay.hidden{display:none}
+  #trailerVideo{width:min(94vw,960px);max-height:76vh;border:1px solid rgba(212,175,55,.35);border-radius:4px;background:#000}
+  #trailerClose{margin-top:16px;font-family:'Cinzel';font-size:12px;letter-spacing:.3em;color:#e6b48a;background:none;border:1px solid rgba(255,140,80,.5);padding:9px 22px;border-radius:3px;cursor:pointer}
+  #trailerClose:hover{border-color:#ffb080;color:#fff}
   .ctrls{margin-top:30px;font-weight:600;letter-spacing:.22em;font-size:12.5px;color:rgba(210,160,130,.6);line-height:2}
   .flicker{animation:fl 4s infinite}
   @keyframes fl{0%,93%,100%{opacity:1}94%{opacity:.72}96%{opacity:.9}97%{opacity:.6}}
@@ -147,6 +154,7 @@
   <div class="title flicker">HELL<span class="b">SCAPE</span> HORROR</div>
   <div class="sub">D E S C E N D   I F   Y O U   D A R E</div>
   <button class="enter" id="enterBtn">▾ DESCEND ▾</button>
+  <button class="enter ghost" id="trailerBtn">▸ WATCH THE TRAILER</button>
   <div class="ctrls">W A S D — MOVE&nbsp;&nbsp;·&nbsp;&nbsp;LEFT / RIGHT ARROWS — TURN&nbsp;&nbsp;·&nbsp;&nbsp;UP / DOWN ARROWS — MOVE&nbsp;&nbsp;·&nbsp;&nbsp;SHIFT — RUN&nbsp;&nbsp;·&nbsp;&nbsp;ESC — PAUSE</div>
   <div style="margin-top:18px;min-height:50px;text-align:center;overflow:hidden">
     <ins class="adsbygoogle"
@@ -195,6 +203,10 @@
   <button class="pauseBtn" id="minimapClose" style="width:180px">Close</button>
 </div>
 
+<div id="trailerOverlay" class="hidden">
+  <video id="trailerVideo" controls playsinline preload="none"></video>
+  <button id="trailerClose">CLOSE</button>
+</div>
 <div id="cubeOverlay" class="hidden">
   <div id="cubeOverlayMsg">SHARD FOUND</div>
   <iframe id="cubeOverlayFrame" src="" allowfullscreen></iframe>
@@ -570,6 +582,32 @@
   const gateGlow=new THREE.Sprite(new THREE.SpriteMaterial({map:haloTex,color:0xff3a10,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
   gateGlow.scale.set(14,10,1);gateGlow.position.set(0,3,ZEND+0.4);g.add(gateGlow);
   const gateLight=new THREE.PointLight(0xff3a10,2.4,20,2);gateLight.position.set(0,3,ZEND+2);g.add(gateLight);
+  // ---- the way out: a gate that does not exist until all four shards are
+  // held. It appears where the player first stood (there is no wall there,
+  // just dark), then its slab rises into the ceiling over a few seconds.
+  // Walking into it ends the run as a win. ----
+  const startGate=new THREE.Group(); startGate.visible=false; g.add(startGate);
+  const sgSlab=new THREE.Mesh(new THREE.BoxGeometry(HW*2-0.4,H-0.3,0.6),gateMat);
+  sgSlab.position.set(0,(H-0.3)/2,3.65); sgSlab.castShadow=true; sgSlab.receiveShadow=true; startGate.add(sgSlab);
+  const sgSeamMat=new THREE.MeshBasicMaterial({color:0xffc040,transparent:true,blending:THREE.AdditiveBlending});
+  for(let k=-2;k<=2;k++){const seam=new THREE.Mesh(new THREE.PlaneGeometry(0.06,H-0.6),sgSeamMat);seam.position.set(k*1.6,(H-0.3)/2,3.33);seam.rotation.y=Math.PI;startGate.add(seam);}
+  const sgGlow=new THREE.Sprite(new THREE.SpriteMaterial({map:haloTex,color:0xffb030,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+  sgGlow.scale.set(14,10,1); sgGlow.position.set(0,3,3.1); startGate.add(sgGlow);
+  const sgLight=new THREE.PointLight(0xffb030,0,22,2); sgLight.position.set(0,3,1.6); startGate.add(sgLight);
+  let gateOpen=false, gateOpenT=-1;
+  const GATE_RISE_SECS=4.0, GATE_RISE_H=H-0.3, GATE_APPEAR_SECS=1.6;
+  const sgRestY=sgSlab.position.y;
+  function openGate(t){
+    if(gateOpen) return;
+    gateOpen=true; gateOpenT=t;
+    startGate.visible=true; sgSlab.position.y=sgRestY; sgSlab.visible=true;
+    showHint('gateOpen','A GATE HAS APPEARED WHERE YOU BEGAN — RUN');
+    objEl.textContent='Return to where you started — the gate is open';
+    if(audioCtx){ scareSound(audioCtx, 36, 2.4, 'sawtooth'); scareSound(audioCtx, 72, 1.6, 'triangle'); }
+  }
+  function closeGate(){
+    gateOpen=false; gateOpenT=-1; startGate.visible=false; sgSlab.position.y=sgRestY; sgSlab.visible=true; sgLight.intensity=0;
+  }
   // brazier lava pool before gate
   const pool=new THREE.Mesh(new THREE.CircleGeometry(2.4,32),lavaMat);pool.rotation.x=-Math.PI/2;pool.position.set(0,0.03,ZEND+4);g.add(pool);
   const poolLight=new THREE.PointLight(0xff5a1a,2.2,16,2);poolLight.position.set(0,1.2,ZEND+4);g.add(poolLight);
@@ -1394,14 +1432,29 @@ const countdownHudEl=document.getElementById('countdownHud');
     if(mode==='play')return;
     loadDemon();
     introEl.classList.add('hidden'); endEl.classList.add('hidden'); pauseMenu.classList.add('hidden');
-    mode='play'; objEl.textContent='Reach the Gate at the end of the hall';
+    mode='play'; objEl.textContent='Find the four shards — then the gate will show itself';
     hudEl.textContent='the fire keeps the dark at bay'; hudEl.style.opacity=1;
     setTimeout(()=>{hudEl.style.opacity=0;},6000);
     if(!isTouch){ try{canvas.requestPointerLock();}catch(e){} }
   }
   document.getElementById('enterBtn').addEventListener('click',start);
+  // intro-screen trailer: plays in its own overlay, never touches game state
+  const TRAILER_URL='https://pub-4a1ee3e926844caba75e0b33d0b2208d.r2.dev/hellscape-trailers-s.mp4';
+  const trailerOverlayEl=document.getElementById('trailerOverlay'), trailerVideoEl=document.getElementById('trailerVideo');
+  function openTrailer(){
+    trailerVideoEl.src=TRAILER_URL; trailerOverlayEl.classList.remove('hidden');
+    const pr=trailerVideoEl.play(); if(pr&&pr.catch) pr.catch(()=>{});
+  }
+  function closeTrailer(){
+    trailerOverlayEl.classList.add('hidden');
+    try{ trailerVideoEl.pause(); trailerVideoEl.removeAttribute('src'); trailerVideoEl.load(); }catch(e){}
+  }
+  document.getElementById('trailerBtn').addEventListener('click',openTrailer);
+  document.getElementById('trailerClose').addEventListener('click',closeTrailer);
+  trailerVideoEl.addEventListener('ended',closeTrailer);
+  addEventListener('keydown',e=>{ if(e.key==='Escape' && !trailerOverlayEl.classList.contains('hidden')) closeTrailer(); });
   document.getElementById('againBtn').addEventListener('click',()=>{
-    if(runDead) resetRun();
+    if(runDead||puzzleComplete) resetRun();
     resetPlayerToSpawn();
     start();
   });
@@ -1502,7 +1555,7 @@ const countdownHudEl=document.getElementById('countdownHud');
       c2.strokeRect(p0[0],p0[1],p1[0]-p0[0],p1[1]-p0[1]);
     }
     // shard markers on minimap
-    for(let _mi=0;_mi<3;_mi++){
+    for(let _mi=0;_mi<SHARD_DATA.length;_mi++){
       if(shardCollected[_mi]) continue;
       const _sd=SHARD_DATA[_mi];
       const _sp=toPx(_sd.wx,_sd.wz);
@@ -1518,7 +1571,14 @@ const countdownHudEl=document.getElementById('countdownHud');
       c2.fillStyle='rgba(255,215,0,0.85)';
       c2.font='bold 8px monospace';
       c2.textAlign='center';
-      c2.fillText(['I','II','III'][_mi],_sp[0],_sp[1]+_sz+9);
+      c2.fillText(['I','II','III','IV'][_mi],_sp[0],_sp[1]+_sz+9);
+    }
+    // the open gate, once all four shards are held
+    if(gateOpen){
+      const gp=toPx(0,3.0);
+      c2.fillStyle='rgba(255,90,20,0.95)'; c2.strokeStyle='#ffd070'; c2.lineWidth=1.5;
+      c2.beginPath(); c2.arc(gp[0],gp[1],7,0,Math.PI*2); c2.fill(); c2.stroke();
+      c2.fillStyle='#ffd070'; c2.font='bold 8px monospace'; c2.textAlign='center'; c2.fillText('GATE',gp[0],gp[1]-10);
     }
     // legend
     c2.font='9px monospace'; c2.textAlign='left';
@@ -1847,7 +1907,7 @@ const countdownHudEl=document.getElementById('countdownHud');
     // full reset after a death: shards back on the floor, timer off, demon gone
     for(let i=0;i<SHARD_DATA.length;i++){ shardCollected[i]=false; if(shardMeshGrps[i]) shardMeshGrps[i].visible=true; if(cubeHudEls[i]) cubeHudEls[i].classList.remove('collected'); }
     countdownStart=-1; countdownHudEl.classList.remove('active','urgent'); puzzleComplete=false;
-    demonDespawn(); demonHits=0; runDead=false;
+    demonDespawn(); demonHits=0; runDead=false; closeGate();
   }
 
   // ---------------- loop ----------------
@@ -1903,8 +1963,18 @@ const countdownHudEl=document.getElementById('countdownHud');
       const nz = player.z + (-mx*sinY - mz*cosY)*sp;
       const res=resolvePosition(nx,nz);
       player.x=res.x; player.z=res.z; player.elev=res.y; curZone=res.zone;
-      // reached gate? (only true when actually in the main hall near its far wall)
-      if(curZone==='hall' && player.z<ZEND+2.7){ endGame('THE GATE','it will not open… not yet'); }
+      // the far wall of the hall is just a wall now — nudge back, run goes on
+      if(curZone==='hall' && player.z<ZEND+2.7){
+        player.z=ZEND+3.2;
+        if(t-(window.__gateNudgeT||-9)>2.5){ window.__gateNudgeT=t;
+          hudEl.textContent='it will not open… not yet.'; hudEl.style.opacity=1; setTimeout(()=>{hudEl.style.opacity=0;},3000);
+          if(audioCtx) scareSound(audioCtx, 60, 0.4, 'square'); }
+      }
+      // walked back into the open gate where the run began = the way out
+      if(gateOpen && curZone==='hall' && player.z>2.5 && t-gateOpenT>GATE_APPEAR_SECS){
+        puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); demonDespawn();
+        endGame('YOU PASS THROUGH','four shards reunited — the gate swallows you whole');
+      }
       // cube shard pickups
       if(t-shardPickupTime>1.5){
         for(let _si=0;_si<SHARD_DATA.length;_si++){
@@ -1917,9 +1987,7 @@ const countdownHudEl=document.getElementById('countdownHud');
             showShardOverlay(_si); break;
           }
         }
-        if(!puzzleComplete && shardCollected.every(Boolean) && player.z>1.2 && curZone==='hall'){
-          puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); demonDespawn(); endGame('THE PUZZLE BOX AWAKENS','four shards reunited — the gate cracks open');
-        }
+        if(!gateOpen && !puzzleComplete && shardCollected.every(Boolean)) openGate(t);
         // countdown timer
         if(countdownStart>=0 && !puzzleComplete){
           const _rem=Math.max(0,COUNTDOWN_SECS-(t-countdownStart));
@@ -1972,6 +2040,15 @@ const countdownHudEl=document.getElementById('countdownHud');
     gtex+=dt*0.03; lavaMat.emissiveMap.offset.y=gtex; lavaMat.map.offset.y=gtex;
     gateLight.intensity=2.0+Math.sin(t*3.1)*0.6; poolLight.intensity=2.0+Math.sin(t*2.0+1)*0.5;
     seamMat.opacity=0.6+Math.sin(t*4)*0.3;
+    if(gateOpen){
+      // materialise (light + seams fade in), then the slab rises out of the way
+      const a=Math.min(1,(t-gateOpenT)/GATE_APPEAR_SECS);
+      const k=Math.max(0,Math.min(1,(t-gateOpenT-GATE_APPEAR_SECS)/GATE_RISE_SECS)), e=1-Math.pow(1-k,3);
+      sgSlab.position.y=sgRestY+GATE_RISE_H*e; sgSlab.visible=k<1;
+      sgLight.intensity=a*(3.4+Math.sin(t*6.5)*1.2);
+      sgSeamMat.opacity=a*(0.85+Math.sin(t*9)*0.15);
+      sgGlow.material.opacity=a;
+    }
 
     // hanging chains sway gently
     for(const c of chainGroups){ c.rotation.z=Math.sin(t*0.7+c.position.x*3+c.position.z)*0.035; c.rotation.x=Math.sin(t*0.55+c.position.z*2)*0.02; }

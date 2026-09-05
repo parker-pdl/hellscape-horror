@@ -26,19 +26,41 @@ Behaviour, per Parker's spec:
 - Carries a dim red point light and a growl that quickens as it closes in.
 - If demon.glb ever fails to load, the game simply plays without it.
 
-### 2. Shard pickup videos (Parker's request)
+### 2. The way out: a gate that appears where you started
+With all four shards held, a gate materialises at the spawn point (there
+was only open dark behind the player there), its gold seams and light fade
+in over ~1.6 s, then the slab rises into the ceiling over 4 s. Walking back
+into it ends the run as a win ("YOU PASS THROUGH"). This replaces the old
+"return to the puzzle box" win check.
+
+Why the start and not the far wall: the far-wall gate at ZEND is mostly
+unreachable since the center corridor was added down the middle of the
+hall's last stretch (its zone takes precedence over the hall's), so the
+old "it will not open… not yet" end screen there was effectively dead code.
+That far-wall touch now just nudges the player back with a hint instead of
+ending the run.
+
+The minimap shows a GATE marker once it is open. DESCEND AGAIN after a win
+now does a full run reset (same as after a death).
+
+### 3. Intro-screen trailer button
+"▸ WATCH THE TRAILER" under DESCEND opens the trailer (hellscape-trailers-s.mp4
+on R2) in its own overlay with native controls; CLOSE, Escape, or the clip
+ending shuts it. Never touches game state.
+
+### 4. Shard pickup videos (Parker's request)
 Picking up a shard now plays a short clip in the overlay instead of the
 pages.dev iframe, and the overlay closes itself when the clip ends:
 - Shards I, III, IV → "Hellscape game play.mp4" (R2)
 - Shard II → "shard #2.mp4" (R2)
 Click/tap still skips. A 30 s safety timer closes it if the network stalls.
 
-### 3. Bug fix: the 4th shard could never be picked up
-Two loops were hard-coded to 3 shards (`_si<3`) after the 4th was added, so
-Shard IV never triggered pickup and never animated. Both now use
-SHARD_DATA.length.
+### 5. Bug fix: the 4th shard could never be picked up
+Three loops were hard-coded to 3 shards after the 4th was added, so Shard
+IV never triggered pickup, never animated, and never showed on the minimap.
+All three now use SHARD_DATA.length.
 
-### 4. Housekeeping
+### 6. Housekeeping
 - resolvePosition() gained an optional `silent` flag so the demon's
   movement never fires the player's room hints.
 - sw.js cache bumped to v4 and now pre-caches GLTFLoader.js + demon.glb.
