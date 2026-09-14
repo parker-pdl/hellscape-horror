@@ -1,5 +1,32 @@
 # Hellscape Horror — Changelog
 
+## Session 09-14-2026 — LEVEL 2 added ("The Pale Halls")
+
+The game is now multi-level. Walk through Level 1's gate (after the four
+shards) and Level 2 loads seamlessly in place, with a big "LEVEL 2" flash —
+no reload, no menu.
+
+Level 2, per Parker's brief + sketch:
+- A brighter level: off-white plaster walls/ceiling, tan wood-plank floor,
+  well lit (bright ambient/hemisphere fill + many wall torches reused from
+  Level 1). Light, airy tan fog instead of the dark red murk.
+- Layout: outer walls, a 2x2 grid of four rooms (A top-left, B top-right,
+  C bottom-left, D bottom-right), ENTER top-right, EXIT bottom-left.
+- A Secret Room is tucked inside Room C. Its door stays SEALED until the
+  first three shards are held, then it unseals to reveal the fourth shard.
+- Four shards total open the EXIT. Shards 1-3 sit in rooms A, B, D; shard 4
+  is in the Secret Room.
+- TWO demons hunt you from the moment you arrive (Level 1 had one). Three
+  hits from either ends the run. Same chase/animation system, own AABB
+  wall collision for the new room geometry.
+- Reaching the open EXIT shows a "LEVEL 3 — COMING SOON" card.
+
+Engine notes: Level 2 is built far down +Z (Z0=1000) so it never overlaps
+Level 1; the whole runtime (collision, minimap, shard/demon logic) is now
+level-aware via a `currentLevel` flag. Level 1 is untouched.
+
+# Hellscape Horror — Changelog
+
 ## Session 09-05-2026 — The demon, shard videos, 4th-shard fix
 
 ### 1. A real enemy: the demon (demon.glb)

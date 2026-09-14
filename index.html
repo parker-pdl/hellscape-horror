@@ -1540,6 +1540,7 @@ const countdownHudEl=document.getElementById('countdownHud');
   // can never drift out of sync with the actual walkable geometry.
   function drawMinimap(){
     const cv=document.getElementById('minimapCanvas'), c2=cv.getContext('2d');
+    if(currentLevel===2){ L2.drawMinimap(cv,c2); return; }
     const W=cv.width,H=cv.height;
     c2.fillStyle='#0a0503'; c2.fillRect(0,0,W,H);
     const allRects=zones.concat([{x0:-HW,x1:HW,z0:ZEND,z1:3.2}]); // include the main hall
@@ -1961,8 +1962,9 @@ const countdownHudEl=document.getElementById('countdownHud');
       const sinY=Math.sin(player.yaw),cosY=Math.cos(player.yaw);
       const nx = player.x + (mx*cosY - mz*sinY)*sp;
       const nz = player.z + (-mx*sinY - mz*cosY)*sp;
-      const res=resolvePosition(nx,nz);
+      const res = currentLevel===2 ? L2.resolve(nx,nz) : resolvePosition(nx,nz);
       player.x=res.x; player.z=res.z; player.elev=res.y; curZone=res.zone;
+      if(currentLevel===2){ L2.update(dt,t); } else {
       // the far wall of the hall is just a wall now — nudge back, run goes on
       if(curZone==='hall' && player.z<ZEND+2.7){
         player.z=ZEND+3.2;
@@ -1973,7 +1975,7 @@ const countdownHudEl=document.getElementById('countdownHud');
       // walked back into the open gate where the run began = the way out
       if(gateOpen && curZone==='hall' && player.z>2.5 && t-gateOpenT>GATE_APPEAR_SECS){
         puzzleComplete=true; countdownHudEl.classList.remove('active','urgent'); demonDespawn();
-        endGame('YOU PASS THROUGH','four shards reunited — the gate swallows you whole');
+        L2.enter(t);
       }
       // cube shard pickups
       if(t-shardPickupTime>1.5){
@@ -2000,6 +2002,7 @@ const countdownHudEl=document.getElementById('countdownHud');
       // the demon wakes once two shards are held, and hunts from then on
       if(!demonActive && !runDead && shardCollected.filter(Boolean).length>=DEMON_WAKE_SHARDS) demonSpawn(t);
       demonUpdate(dt,t);
+      }
       // head bob
       const moving=(mx||mz);
       if(moving) bob+=dt*10*run;
@@ -2019,9 +2022,11 @@ const countdownHudEl=document.getElementById('countdownHud');
       camera.rotation.set(player.pitch,player.yaw,0);
     }
 
-    // fog thickens on the way down into the boiler depths
-    const targetFog = (curZone==='boiler' && player.elev<-0.6) ? FOG_DEEP : FOG_BASE;
-    scene.fog.density += (targetFog-scene.fog.density)*Math.min(1,dt*0.6);
+    // fog thickens on the way down into the boiler depths (Level 1 only)
+    if(currentLevel===1){
+      const targetFog = (curZone==='boiler' && player.elev<-0.6) ? FOG_DEEP : FOG_BASE;
+      scene.fog.density += (targetFog-scene.fog.density)*Math.min(1,dt*0.6);
+    }
 
     // torch throw + fill follow camera
     camera.getWorldDirection(fwd);
@@ -2123,7 +2128,433 @@ const countdownHudEl=document.getElementById('countdownHud');
 
   // reveal after first render
   requestAnimationFrame(()=>{ animate(); setTimeout(()=>{loadwrap.style.opacity=0;setTimeout(()=>loadwrap.style.display='none',600);},250); });
-  window.__HELL={start:()=>start(), dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}},
+  // preview shortcut: open the page with #l2 to jump straight into Level 2
+  if(location.hash==='#l2'){ setTimeout(()=>{ try{ introEl.classList.add('hidden'); mode='play'; L2.enter(clock.elapsedTime); }catch(e){} }, 1200); }
+  // ================================================================
+  //  LEVEL 2 — "THE PALE HALLS"
+  //  A brighter, white/off-white level with a tan wood-plank floor.
+  //  Built far down +Z (Z0) so it never overlaps Level 1's geometry;
+  //  the player is teleported here when they pass through Level 1's gate.
+  //  Layout (top-down, matches Parker's sketch):
+  //    outer walls, 4 rooms in a 2x2 grid, a Secret Room tucked in the
+  //    bottom-left room, ENTER top-right, EXIT bottom-left.
+  //  Two demons hunt from the moment you arrive. Four shards open the exit;
+  //  the fourth sits in the Secret Room, whose door only unseals once the
+  //  first three are held.
+  // ================================================================
+  let currentLevel = 1;
+  const L2 = (function(){
+    const Z0 = 1000;          // world-Z offset for the whole level
+    const H2 = 6;             // wall height (matches Level 1)
+    const PR = 0.34;          // player/demon collision radius
+    const zw = lz => lz + Z0; // local-z -> world-z helper
+
+    const grp = new THREE.Group(); grp.visible = false; scene.add(grp);
+
+    // ---- bright, airy lighting (intensities 0 until we enter) ----
+    const amb2  = new THREE.AmbientLight(0xfff3e6, 0); scene.add(amb2);
+    const hemi2 = new THREE.HemisphereLight(0xfff8ee, 0x9c8a6e, 0); scene.add(hemi2);
+    const sun2  = new THREE.DirectionalLight(0xfff2dc, 0); sun2.position.set(6,14,zw(6)); scene.add(sun2);
+
+    // ---- textures: tan wood-plank floor, off-white plaster walls ----
+    function woodFloorTex(){
+      const s=512,c=document.createElement('canvas');c.width=c.height=s;const x=c.getContext('2d');
+      x.fillStyle='#d8c39a';x.fillRect(0,0,s,s);
+      const planks=8, ph=s/planks;
+      for(let p=0;p<planks;p++){
+        const y=p*ph;
+        const base=205+Math.floor(Math.random()*30);
+        x.fillStyle='rgb('+ (base) +','+(base-24)+','+(base-62)+')';
+        x.fillRect(0,y,s,ph);
+        // plank seam
+        x.fillStyle='rgba(120,92,54,0.55)';x.fillRect(0,y,s,2);
+        // wood grain streaks
+        for(let g=0;g<26;g++){
+          x.strokeStyle='rgba('+(150+Math.random()*40|0)+','+(112+Math.random()*30|0)+',72,'+(0.06+Math.random()*0.12).toFixed(2)+')';
+          x.lineWidth=1+Math.random()*1.5;
+          const gy=y+2+Math.random()*(ph-4);
+          x.beginPath();x.moveTo(0,gy);
+          for(let xx=0;xx<=s;xx+=32){x.lineTo(xx,gy+(Math.random()-0.5)*3);}
+          x.stroke();
+        }
+        // occasional knot
+        if(Math.random()<0.6){const kx=Math.random()*s,ky=y+ph*0.5;const rg=x.createRadialGradient(kx,ky,1,kx,ky,7+Math.random()*5);
+          rg.addColorStop(0,'rgba(96,70,40,0.7)');rg.addColorStop(1,'rgba(96,70,40,0)');x.fillStyle=rg;x.beginPath();x.arc(kx,ky,10,0,Math.PI*2);x.fill();}
+      }
+      const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;
+    }
+    function plasterTex(hex){
+      const s=256,c=document.createElement('canvas');c.width=c.height=s;const x=c.getContext('2d');
+      x.fillStyle=hex||'#efe9dd';x.fillRect(0,0,s,s);
+      for(let i=0;i<2600;i++){const v=Math.random()*18-9;x.fillStyle='rgba('+(200+v|0)+','+(196+v|0)+','+(184+v|0)+','+(0.05+Math.random()*0.08).toFixed(2)+')';
+        x.fillRect(Math.random()*s,Math.random()*s,1+Math.random()*2,1+Math.random()*2);}
+      // faint scuffs low on the wall
+      for(let i=0;i<8;i++){x.strokeStyle='rgba(150,140,120,0.06)';x.lineWidth=2+Math.random()*4;x.beginPath();
+        const yy=s*0.6+Math.random()*s*0.35;x.moveTo(Math.random()*s,yy);x.lineTo(Math.random()*s,yy+Math.random()*20-10);x.stroke();}
+      const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;
+    }
+
+    const floorTex=woodFloorTex(); floorTex.repeat.set(10,7);
+    const wallTex=plasterTex('#efe9dd'); wallTex.repeat.set(4,1.4);
+    const ceilTex=plasterTex('#f4efe6'); ceilTex.repeat.set(8,6);
+
+    const floorMat=new THREE.MeshStandardMaterial({map:floorTex,roughness:0.82,metalness:0.02});
+    const wallMat =new THREE.MeshStandardMaterial({map:wallTex,color:0xf3eee2,roughness:0.92,metalness:0.0});
+    const ceilMat =new THREE.MeshStandardMaterial({map:ceilTex,roughness:0.95,metalness:0.0});
+    const trimMat =new THREE.MeshStandardMaterial({color:0x8a6a44,roughness:0.7,metalness:0.05}); // wood trim/doorframes
+
+    // ---- floor & ceiling ----
+    const BX=19, BZ=13; // interior half-extents
+    {
+      const fl=new THREE.Mesh(new THREE.PlaneGeometry(BX*2,BZ*2),floorMat);
+      fl.rotation.x=-Math.PI/2; fl.position.set(0,0,zw(0)); fl.receiveShadow=true; grp.add(fl);
+      const ce=new THREE.Mesh(new THREE.PlaneGeometry(BX*2,BZ*2),ceilMat);
+      ce.rotation.x=Math.PI/2; ce.position.set(0,H2,zw(0)); grp.add(ce);
+    }
+
+    // ---- wall builder: each wall is a thin axis-aligned box; it becomes both
+    //      a mesh and a collider AABB (world coords). ----
+    const walls=[]; // {x0,x1,z0,z1}
+    function addWall(x0,x1,lz0,lz1,mat){
+      const z0=zw(lz0), z1=zw(lz1);
+      const w=Math.max(0.4,x1-x0), d=Math.max(0.4,z1-z0);
+      const m=new THREE.Mesh(new THREE.BoxGeometry(w,H2,d), mat||wallMat);
+      m.position.set((x0+x1)/2,H2/2,(z0+z1)/2); m.castShadow=true; m.receiveShadow=true; grp.add(m);
+      walls.push({x0:Math.min(x0,x1),x1:Math.max(x0,x1),z0:Math.min(z0,z1),z1:Math.max(z0,z1)});
+      return m;
+    }
+    const TT=0.2; // wall half-thickness
+
+    // Enter gap on the north wall (top) near +X; Exit gap on the west wall near -Z (bottom-left)
+    const ENTER_X0=12.5, ENTER_X1=17.5;
+    const EXIT_Z0=-12, EXIT_Z1=-8;
+    // ----- outer walls -----
+    addWall(-BX-TT,-BX+TT, -13, EXIT_Z0);      // west (below exit)
+    addWall(-BX-TT,-BX+TT, EXIT_Z1, 13);       // west (above exit)
+    addWall( BX-TT, BX+TT, -13, 13);           // east
+    addWall(-BX, BX, -BZ-TT, -BZ+TT);          // south
+    addWall(-BX, ENTER_X0, BZ-TT, BZ+TT);      // north (left of enter)
+    addWall(ENTER_X1, BX, BZ-TT, BZ+TT);       // north (right of enter)
+
+    // ----- room helper: 4 walls around an interior with one doorway gap -----
+    // side: 'N'|'S'|'E'|'W' wall that holds the doorway; g0,g1 = gap span
+    function room(ix0,ix1,iz0,iz1, side, g0, g1){
+      // north wall (iz1) & south wall (iz0)
+      if(side==='N'){ addWall(ix0,g0, iz1-TT,iz1+TT); addWall(g1,ix1, iz1-TT,iz1+TT); }
+      else addWall(ix0,ix1, iz1-TT,iz1+TT);
+      if(side==='S'){ addWall(ix0,g0, iz0-TT,iz0+TT); addWall(g1,ix1, iz0-TT,iz0+TT); }
+      else addWall(ix0,ix1, iz0-TT,iz0+TT);
+      // west (ix0) & east (ix1)
+      if(side==='W'){ addWall(ix0-TT,ix0+TT, iz0,g0); addWall(ix0-TT,ix0+TT, g1,iz1); }
+      else addWall(ix0-TT,ix0+TT, iz0,iz1);
+      if(side==='E'){ addWall(ix1-TT,ix1+TT, iz0,g0); addWall(ix1-TT,ix1+TT, g1,iz1); }
+      else addWall(ix1-TT,ix1+TT, iz0,iz1);
+      // doorframe trim posts at the gap
+      const fx=(side==='N'||side==='S');
+      if(fx){ addWall(g0-0.12,g0+0.12, (side==='N'?iz1:iz0)-TT,(side==='N'?iz1:iz0)+TT, trimMat);
+              addWall(g1-0.12,g1+0.12, (side==='N'?iz1:iz0)-TT,(side==='N'?iz1:iz0)+TT, trimMat); }
+    }
+    // Room A (top-left) door S ; Room B (top-right) door S
+    room(-16.5,-3, 2.5,10.5, 'S', -10.5,-8.3);
+    room( 3,16.5, 2.5,10.5, 'S',  8.3,10.5);
+    // Room C (bottom-left) door N ; Room D (bottom-right) door N
+    room(-16.5,-3, -10.5,-2.5, 'N', -10.5,-8.3);
+    room( 3,16.5, -10.5,-2.5, 'N',  8.3,10.5);
+
+    // ----- Secret Room inside Room C: door on its east wall (gap), sealed -----
+    const SRx0=-14, SRx1=-9, SRz0=-9, SRz1=-5, SRg0=-7.6, SRg1=-5.9;
+    addWall(SRx0-TT,SRx0+TT, SRz0,SRz1);                 // west
+    addWall(SRx0,SRx1, SRz0-TT,SRz0+TT);                 // south
+    addWall(SRx0,SRx1, SRz1-TT,SRz1+TT);                 // north
+    addWall(SRx1-TT,SRx1+TT, SRz0,SRg0);                 // east lower
+    addWall(SRx1-TT,SRx1+TT, SRg1,SRz1);                 // east upper
+    // the sealed door slab filling the gap (its own collider entry we can drop)
+    const secretDoor={x0:SRx1-TT,x1:SRx1+TT,z0:zw(SRg0),z1:zw(SRg1)};
+    const secretSlab=new THREE.Mesh(new THREE.BoxGeometry(0.5,H2-0.2,(SRg1-SRg0)),
+      new THREE.MeshStandardMaterial({color:0x6f5433,roughness:0.6,metalness:0.15,emissive:0x2a1c0c,emissiveIntensity:0.4}));
+    secretSlab.position.set(SRx1,(H2-0.2)/2,zw((SRg0+SRg1)/2)); secretSlab.castShadow=true; grp.add(secretSlab);
+    // a glowing seam so the player notices the sealed door
+    const secretGlow=new THREE.PointLight(0xffb840,0.0,5,2); secretGlow.position.set(SRx1+0.4,2.4,zw((SRg0+SRg1)/2)); grp.add(secretGlow);
+    let secretOpen=false;
+    walls.push(secretDoor); // active collider until opened
+
+    // ---- torches: reuse Level 1's addTorch (brackets + flame sprite + light,
+    //      auto-flickered by the main loop). More of them, warmer, = well lit. ----
+    function T(lx,ly,lz,side){ addTorch(grp, lx, ly, zw(lz), side, 0xffb060); }
+    // along the outer walls
+    for(const lz of [-11,-4,4,11]){ T(-BX+0.35, 3.2, lz, 1); T(BX-0.35, 3.2, lz, -1); }
+    for(const lx of [-13,-6,6,13]){ T(lx, 3.2, -BZ+0.35, 1); T(lx, 3.2, BZ-0.35, 1); }
+    // a couple inside each room for the "much brighter" feel
+    T(-14.5,3.2,6.5,1); T(-4.5,3.2,6.5,-1);
+    T(14.5,3.2,6.5,-1); T(4.5,3.2,6.5,1);
+    T(-14.5,3.2,-6.5,1); T(-4.5,3.2,-6.5,-1);
+    T(14.5,3.2,-6.5,-1); T(4.5,3.2,-6.5,1);
+
+    // extra bright fill point-lights (no flicker) so rooms read clearly
+    const fills=[[-9.75,6.5],[9.75,6.5],[-9.75,-6.5],[9.75,-6.5],[0,0]];
+    for(const f of fills){ const pl=new THREE.PointLight(0xffe9c8,0.30,13,2); pl.position.set(f[0],4.4,zw(f[1])); grp.add(pl); }
+
+    // ---- ENTER / EXIT gate frames + the exit slab that rises on 4 shards ----
+    // enter frame (decorative)
+    addWall(ENTER_X0-0.15,ENTER_X0+0.15, BZ-TT,BZ+TT, trimMat);
+    addWall(ENTER_X1-0.15,ENTER_X1+0.15, BZ-TT,BZ+TT, trimMat);
+    // exit: a slab in the west-wall gap, sealed until all four shards are held
+    const exitSlab=new THREE.Mesh(new THREE.BoxGeometry(0.5,H2-0.2,(EXIT_Z1-EXIT_Z0)),
+      new THREE.MeshStandardMaterial({color:0x2a2018,roughness:0.6,metalness:0.4,emissive:0x120a04,emissiveIntensity:0.5}));
+    exitSlab.position.set(-BX,(H2-0.2)/2,zw((EXIT_Z0+EXIT_Z1)/2)); exitSlab.castShadow=true; grp.add(exitSlab);
+    const exitDoor={x0:-BX-TT,x1:-BX+TT,z0:zw(EXIT_Z0),z1:zw(EXIT_Z1)};
+    walls.push(exitDoor);
+    const exitGlow=new THREE.PointLight(0xffd070,0.0,10,2); exitGlow.position.set(-BX+1.2,3,zw((EXIT_Z0+EXIT_Z1)/2)); grp.add(exitGlow);
+    let exitOpen=false, exitOpenT=-1;
+
+    // ---- shards (own set, world coords) ----
+    const _L2VID=(SHARD_DATA[0]&&SHARD_DATA[0].video)||'';   // same clip as Level 1
+    const SHARDS=[
+      {wx:-9.75, wz:zw(6.5),  y:1.1, done:false, secret:false, label:'FIRST SHARD',  video:_L2VID, hold:5000},
+      {wx: 9.75, wz:zw(6.5),  y:1.1, done:false, secret:false, label:'SECOND SHARD', video:_L2VID, hold:5000},
+      {wx: 9.75, wz:zw(-6.5), y:1.1, done:false, secret:false, label:'THIRD SHARD',  video:_L2VID, hold:5000},
+      {wx:-11.4, wz:zw(-7.0), y:1.1, done:false, secret:true,  label:'FOURTH SHARD', video:_L2VID, hold:12000},
+    ];
+    const shardGeo=new THREE.OctahedronGeometry(0.28,0);
+    const shardGrps=[]; const shardLts=[];
+    SHARDS.forEach((sd,i)=>{
+      const mat=new THREE.MeshStandardMaterial({color:0xede0a0,emissive:0xc89500,emissiveIntensity:1.1,metalness:0.9,roughness:0.14});
+      const gg=new THREE.Group(); gg.position.set(sd.wx,sd.y,sd.wz);
+      const mesh=new THREE.Mesh(shardGeo,mat); mesh.castShadow=true; gg.add(mesh);
+      const pl=new THREE.PointLight(0xffd060,1.4,6,2); gg.add(pl);
+      gg.visible=false; grp.add(gg); shardGrps.push(gg); shardLts.push(pl);
+    });
+    const cubeHudEls2=[0,1,2,3].map(i=>document.getElementById('cubeHud'+i));
+
+    // ---- demons (two). Loaded fresh on enter so each animates independently ----
+    const demons=[]; // {root,mixer,clips,cur,pos,wanderAng,wanderUntil,stuck,light}
+    const DSPAWN=[{x:-8,z:zw(11.3)},{x:6,z:zw(11.3)}];
+    let demonsLoading=false;
+    function loadDemons(){
+      if(demons.length||demonsLoading||typeof THREE.GLTFLoader==='undefined') return;
+      demonsLoading=true;
+      for(let i=0;i<2;i++){
+        new THREE.GLTFLoader().load('./demon.glb', gl=>{
+          const root=gl.scene; root.scale.setScalar(1.12);
+          root.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.frustumCulled=false;} });
+          const mixer=new THREE.AnimationMixer(root); const clips={};
+          for(const c of gl.animations) clips[c.name]=mixer.clipAction(c);
+          const light=new THREE.PointLight(0xff3a12,1.1,7,2);
+          scene.add(root); scene.add(light);
+          const sp=DSPAWN[i%2];
+          const dem={root,mixer,clips,cur:null,pos:{x:sp.x,z:sp.z,y:0},wanderAng:0,wanderUntil:-1,stuck:0,light};
+          root.position.set(sp.x,0,sp.z); root.visible=(currentLevel===2);
+          light.visible=(currentLevel===2);
+          demons.push(dem); demPlay(dem,'Orc_Idle');
+        }, undefined, ()=>{});
+      }
+    }
+    function demPlay(dem,name,fade){
+      const a=dem.clips[name]||dem.clips['Idle']||Object.values(dem.clips)[0];
+      if(!a||dem.cur===a) return;
+      if(dem.cur) dem.cur.fadeOut(fade||0.2);
+      a.reset().fadeIn(fade||0.2).play(); dem.cur=a;
+    }
+
+    // ---- collision: AABB push-out against all walls (+ active doors) ----
+    function resolve(nx,nz){
+      let x=nx, z=nz;
+      for(let pass=0;pass<2;pass++){
+        for(let i=0;i<walls.length;i++){
+          const w=walls[i];
+          if(x> w.x0-PR && x< w.x1+PR && z> w.z0-PR && z< w.z1+PR){
+            const oL=x-(w.x0-PR), oR=(w.x1+PR)-x, oD=z-(w.z0-PR), oU=(w.z1+PR)-z;
+            const m=Math.min(oL,oR,oD,oU);
+            if(m===oL) x=w.x0-PR; else if(m===oR) x=w.x1+PR;
+            else if(m===oD) z=w.z0-PR; else z=w.z1+PR;
+          }
+        }
+      }
+      return {x,z,y:0,zone:'level2'};
+    }
+
+    // ---- shard / secret / exit logic + demons, run every frame in Level 2 ----
+    let lastPick=-10;
+    function openSecret(){
+      if(secretOpen) return; secretOpen=true;
+      // drop the door collider, hide the slab, reveal shard 4
+      const idx=walls.indexOf(secretDoor); if(idx>=0) walls.splice(idx,1);
+      secretSlab.visible=false; shardGrps[3].visible=true;
+      showHint('l2secret','THE SECRET ROOM UNSEALS — SOMETHING GLEAMS INSIDE');
+      objEl.textContent='The secret room is open — take the fourth shard';
+      if(audioCtx) scareSound(audioCtx, 90, 1.0, 'sawtooth');
+    }
+    function openExit(t){
+      if(exitOpen) return; exitOpen=true; exitOpenT=t;
+      const idx=walls.indexOf(exitDoor); if(idx>=0) walls.splice(idx,1);
+      showHint('l2exit','THE EXIT HAS OPENED — FLEE THE PALE HALLS');
+      objEl.textContent='All four shards held — reach the EXIT (bottom-left)';
+      if(audioCtx) scareSound(audioCtx, 120, 1.2, 'sawtooth');
+    }
+    function nDone(){ let n=0; for(const s of SHARDS) if(s.done) n++; return n; }
+
+    function updateDemon(dem,dt,t){
+      const dx=player.x-dem.pos.x, dz=player.z-dem.pos.z, dist=Math.hypot(dx,dz);
+      let moved=false,mvx=0,mvz=0;
+      if(dist<DEMON_REACH){
+        if(t-l2LastHit>DEMON_HIT_COOLDOWN) l2Hit(t,dem);
+      } else {
+        let ang; if(t<dem.wanderUntil) ang=dem.wanderAng; else ang=Math.atan2(dx,dz);
+        const step=DEMON_SPEED*dt;
+        const tx=dem.pos.x+Math.sin(ang)*step, tz=dem.pos.z+Math.cos(ang)*step;
+        const r=resolve(tx,tz); mvx=r.x-dem.pos.x; mvz=r.z-dem.pos.z;
+        const got=Math.hypot(mvx,mvz); dem.pos.x=r.x; dem.pos.z=r.z;
+        moved=got>step*0.25;
+        if(!moved && t>=dem.wanderUntil) dem.stuck+=dt; else if(moved && t>=dem.wanderUntil) dem.stuck=0;
+        if(dem.stuck>0.5){ dem.wanderAng=ang+(Math.random()<0.5?1:-1)*(Math.PI/2+Math.random()*Math.PI/2); dem.wanderUntil=t+0.9+Math.random()*0.8; dem.stuck=0; }
+      }
+      dem.root.position.set(dem.pos.x,dem.pos.y,dem.pos.z);
+      if(moved){ const yaw=Math.atan2(mvx,mvz); dem.root.rotation.y+=Math.atan2(Math.sin(yaw-dem.root.rotation.y),Math.cos(yaw-dem.root.rotation.y))*Math.min(1,dt*8); }
+      else if(dist<6){ const yaw=Math.atan2(dx,dz); dem.root.rotation.y+=Math.atan2(Math.sin(yaw-dem.root.rotation.y),Math.cos(yaw-dem.root.rotation.y))*Math.min(1,dt*4); }
+      if(!moved) demPlay(dem,'Orc_Idle'); else if(t<dem.wanderUntil) demPlay(dem,'Sad_Walk'); else demPlay(dem,'Zombie_Walk');
+      if(dem.mixer) dem.mixer.update(dt);
+      dem.light.position.set(dem.pos.x,dem.pos.y+1.4,dem.pos.z);
+      dem.light.intensity=1.1+Math.sin(t*9+dem.pos.x)*0.4;
+    }
+    let l2LastHit=-99;
+    function l2Hit(t,dem){
+      if(runDead) return;
+      demonHits++; l2LastHit=t; triggerJumpScare();
+      const dmgEl=document.getElementById('dmg'); dmgEl.style.opacity=1; setTimeout(()=>{dmgEl.style.opacity=0;},700);
+      for(let i=0;i<demonLifeEls.length;i++) demonLifeEls[i].classList.toggle('lost', i<demonHits);
+      if(demonHits>=DEMON_HITS_TO_DIE){ runDead=true; demonHudEl.classList.remove('danger'); endGame('THEY REACHED YOU','the pale halls swallow the light — the demons take you'); return; }
+      demonHudEl.classList.add('danger');
+      hudEl.textContent = demonHits===1 ? 'one of them touched you. run.' : 'one more and the dark takes you';
+      hudEl.style.opacity=1; setTimeout(()=>{hudEl.style.opacity=0;},3200);
+      // shove that demon back so it can't chain hits
+      const dx=dem.pos.x-player.x, dz=dem.pos.z-player.z, d=Math.hypot(dx,dz)||1;
+      const r=resolve(dem.pos.x+dx/d*3.2, dem.pos.z+dz/d*3.2); dem.pos.x=r.x; dem.pos.z=r.z;
+    }
+
+    function update(dt,t){
+      // shard pickups
+      if(t-lastPick>1.2){
+        for(let i=0;i<SHARDS.length;i++){
+          const s=SHARDS[i]; if(s.done) continue;
+          if(s.secret && !secretOpen) continue;
+          if(Math.hypot(player.x-s.wx, player.z-s.wz)<1.6){
+            s.done=true; lastPick=t; shardGrps[i].visible=false;
+            if(cubeHudEls2[i]) cubeHudEls2[i].classList.add('collected');
+            showShardOverlay2(i);
+            if(!secretOpen && SHARDS[0].done && SHARDS[1].done && SHARDS[2].done) openSecret();
+            if(!exitOpen && SHARDS.every(x=>x.done)) openExit(t);
+            break;
+          }
+        }
+      }
+      // reached the open exit (walked out through the west-wall gap)
+      if(exitOpen && player.x < -BX+0.4 && player.z>zw(EXIT_Z0)-0.6 && player.z<zw(EXIT_Z1)+0.6){
+        currentLevel=0; // stop further updates
+        for(const d of demons){ d.root.visible=false; d.light.visible=false; }
+        endGame('LEVEL 3 — COMING SOON','you pass through the pale halls… the descent continues');
+      }
+      // demons
+      for(const d of demons) updateDemon(d,dt,t);
+      // shard bob/spin + light pulse
+      for(let i=0;i<SHARDS.length;i++){
+        if(SHARDS[i].done) continue; if(!shardGrps[i].visible) continue;
+        shardGrps[i].children[0].rotation.y=t*1.3+i*2.1; shardGrps[i].children[0].rotation.x=t*0.6+i;
+        shardGrps[i].position.y=SHARDS[i].y+Math.sin(t*1.7+i*1.8)*0.14;
+        shardLts[i].intensity=1.2+Math.sin(t*3+i*0.9)*0.5;
+      }
+      if(!secretOpen){ secretGlow.intensity=0.6+Math.sin(t*3)*0.4; }
+      if(exitOpen){ const a=Math.min(1,(t-exitOpenT)/1.2); exitGlow.intensity=a*(2.6+Math.sin(t*6)*1.0);
+        exitSlab.position.y=(H2-0.2)/2 + Math.min(1,(t-exitOpenT)/2.2)*H2; exitSlab.visible=(t-exitOpenT)<2.4; }
+    }
+
+    // ---- shard cutscene: reuse Level 1's overlay chrome (short pause) ----
+    function showShardOverlay2(idx){
+      const el=document.getElementById('cubeOverlay');
+      const frame=document.getElementById('cubeOverlayFrame');
+      const msg=document.getElementById('cubeOverlayMsg');
+      const vid=document.getElementById('cubeOverlayVideo');
+      msg.textContent=SHARDS[idx].label+' FOUND';
+      frame.classList.add('hidden'); try{frame.src='';}catch(_){}
+      el.classList.remove('hidden'); mode='cutscene';
+      let closed=false;
+      function done(){ if(closed) return; closed=true; clearTimeout(tmr);
+        el.classList.add('hidden'); try{vid.pause(); vid.removeAttribute('src'); vid.load();}catch(_){}
+        vid.removeEventListener('ended',done); if(mode==='cutscene') mode='play'; }
+      // play the Level 1 clip; auto-close at `hold` (5s), or on video end,
+      // whichever comes first. The secret/4th shard holds ~12s so its clip
+      // runs long enough to show the demon.
+      const url=SHARDS[idx].video;
+      if(url){ vid.classList.remove('hidden'); vid.src=url; try{vid.currentTime=0;}catch(_){}
+        vid.addEventListener('ended',done,{once:true});
+        const pr=vid.play(); if(pr&&pr.catch) pr.catch(()=>{}); }
+      else { vid.classList.add('hidden'); }
+      var tmr=setTimeout(done, SHARDS[idx].hold||5000);
+    }
+
+    // ---- the transition into Level 2 ----
+    function enter(t){
+      currentLevel=2;
+      grp.visible=true;
+      // brighten the world
+      amb2.intensity=0.34; hemi2.intensity=0.30; sun2.intensity=0.0;
+      scene.fog.color.setHex(0xe6d9c0); scene.background.setHex(0xe6d9c0); scene.fog.density=0.02;
+      // reset shard/exit/secret state visuals
+      SHARDS.forEach((s,i)=>{ s.done=false; shardGrps[i].visible=!s.secret; });
+      cubeHudEls2.forEach(e=>{ if(e) e.classList.remove('collected'); });
+      secretOpen=false; secretSlab.visible=true;
+      // demons
+      runDead=false; demonHits=0; l2LastHit=-99;
+      demonLifeEls.forEach(e=>e.classList.remove('lost'));
+      demonHudEl.classList.add('active'); demonHudEl.classList.remove('danger');
+      loadDemons();
+      demons.forEach((d,i)=>{ const sp=DSPAWN[i%2]; d.pos={x:sp.x,z:sp.z,y:0}; d.root.position.set(sp.x,0,sp.z); d.root.visible=true; d.light.visible=true; });
+      // place the player at the ENTER (top-right), facing into the level (-Z)
+      player.x=15; player.z=zw(11.3); player.yaw=0; player.pitch=0; player.elev=0; player.vy=0; player.airY=0; player.grounded=true;
+      curZone='level2'; mode='play';
+      objEl.textContent='LEVEL 2 — find the four shards. Two demons hunt you.';
+      // big "LEVEL 2" flash
+      let f=document.getElementById('l2flash');
+      if(!f){ f=document.createElement('div'); f.id='l2flash';
+        f.style.cssText='position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;pointer-events:none;background:radial-gradient(circle,rgba(255,245,225,.0),rgba(255,245,225,.85));transition:opacity 1.4s;';
+        f.innerHTML='<div style="font-family:Cinzel,serif;font-weight:800;letter-spacing:.28em;font-size:min(13vw,120px);color:#6a4a24;text-shadow:0 2px 30px rgba(255,240,210,.9)">LEVEL&nbsp;2</div>';
+        document.body.appendChild(f);
+      }
+      f.style.opacity='1'; f.style.display='flex';
+      setTimeout(()=>{ f.style.opacity='0'; setTimeout(()=>{ f.style.display='none'; },1500); }, 1400);
+      if(!isTouch){ try{canvas.requestPointerLock();}catch(e){} }
+    }
+
+    // ---- minimap for Level 2 ----
+    function drawMinimap(cv,c2){
+      const W=cv.width,H=cv.height;
+      c2.fillStyle='#141210'; c2.fillRect(0,0,W,H);
+      const minX=-BX-1,maxX=BX+1,minZ=-BZ-1,maxZ=BZ+1, pad=18;
+      const scale=Math.min((W-pad*2)/(maxX-minX),(H-pad*2)/(maxZ-minZ));
+      const toPx=(x,lz)=>[pad+(x-minX)*scale, pad+(lz-minZ)*scale];
+      // walls
+      c2.fillStyle='rgba(210,195,160,.85)';
+      for(const w of walls){ const p0=toPx(w.x0,w.z0-Z0),p1=toPx(w.x1,w.z1-Z0);
+        c2.fillRect(Math.min(p0[0],p1[0]),Math.min(p0[1],p1[1]),Math.abs(p1[0]-p0[0])+1,Math.abs(p1[1]-p0[1])+1); }
+      // shards
+      for(let i=0;i<SHARDS.length;i++){ const s=SHARDS[i]; if(s.done) continue; if(s.secret&&!secretOpen) continue;
+        const p=toPx(s.wx,s.wz-Z0); c2.fillStyle='rgba(255,215,0,.95)'; c2.beginPath(); c2.arc(p[0],p[1],4,0,Math.PI*2); c2.fill(); }
+      // exit marker
+      const ep=toPx(-BX,(EXIT_Z0+EXIT_Z1)/2); c2.fillStyle=exitOpen?'rgba(120,255,140,.95)':'rgba(255,120,60,.9)';
+      c2.beginPath(); c2.arc(ep[0],ep[1],5,0,Math.PI*2); c2.fill();
+      c2.fillStyle='#e9dec6'; c2.font='bold 8px monospace'; c2.textAlign='center'; c2.fillText('EXIT',ep[0],ep[1]-8);
+      // demons
+      c2.fillStyle='rgba(255,60,30,.95)';
+      for(const d of demons){ const p=toPx(d.pos.x,d.pos.z-Z0); c2.beginPath(); c2.arc(p[0],p[1],4,0,Math.PI*2); c2.fill(); }
+      // player
+      const pp=toPx(player.x,player.z-Z0); const fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
+      c2.strokeStyle='#4a2a10'; c2.lineWidth=2.5; c2.beginPath(); c2.moveTo(pp[0],pp[1]); c2.lineTo(pp[0]+fx*16,pp[1]+fz*16); c2.stroke();
+      c2.fillStyle='#3a2408'; c2.beginPath(); c2.arc(pp[0],pp[1],5,0,Math.PI*2); c2.fill();
+    }
+
+    return { enter, resolve, update, drawMinimap, _walls:walls, _SHARDS:SHARDS, get z0(){return Z0;} };
+  })();
+
+  window.__HELL={start:()=>start(), enterL2:()=>{ mode='play'; L2.enter(clock.elapsedTime); }, level:()=>currentLevel, dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}},
     state:()=>({x:player.x,z:player.z,elev:player.elev,zone:curZone,mode:mode,yaw:player.yaw,pitch:player.pitch}),
     teleport:(x,z)=>{player.x=x;player.z=z;},
     // testing helpers: list every registered zone's bounding rect/name so a
