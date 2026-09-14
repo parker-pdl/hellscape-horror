@@ -2198,9 +2198,9 @@ const countdownHudEl=document.getElementById('countdownHud');
     const wallTex=plasterTex('#efe9dd'); wallTex.repeat.set(4,1.4);
     const ceilTex=plasterTex('#f4efe6'); ceilTex.repeat.set(8,6);
 
-    const floorMat=new THREE.MeshStandardMaterial({map:floorTex,color:0xe4d7bd,roughness:0.86,metalness:0.02});
-    const wallMat =new THREE.MeshStandardMaterial({map:wallTex,color:0xdcd4bf,roughness:0.94,metalness:0.0});
-    const ceilMat =new THREE.MeshStandardMaterial({map:ceilTex,color:0xdfd6c6,roughness:0.96,metalness:0.0});
+    const floorMat=new THREE.MeshStandardMaterial({map:floorTex,color:0xbfb298,roughness:0.9,metalness:0.02});
+    const wallMat =new THREE.MeshStandardMaterial({map:wallTex,color:0xb8b09b,roughness:0.96,metalness:0.0});
+    const ceilMat =new THREE.MeshStandardMaterial({map:ceilTex,color:0xb9b0a0,roughness:0.97,metalness:0.0});
     const trimMat =new THREE.MeshStandardMaterial({color:0x8a6a44,roughness:0.7,metalness:0.05}); // wood trim/doorframes
 
     // ---- floor & ceiling ----
@@ -2292,7 +2292,7 @@ const countdownHudEl=document.getElementById('countdownHud');
 
     // extra bright fill point-lights (no flicker) so rooms read clearly
     const fills=[[-9.75,6.5],[9.75,6.5],[-9.75,-6.5],[9.75,-6.5],[0,0]];
-    for(const f of fills){ const pl=new THREE.PointLight(0xffe9c8,0.20,13,2); pl.position.set(f[0],4.4,zw(f[1])); grp.add(pl); }
+    for(const f of fills){ const pl=new THREE.PointLight(0xffe9c8,0.12,12,2); pl.position.set(f[0],4.4,zw(f[1])); grp.add(pl); }
 
     // ---- ENTER / EXIT gate frames + the exit slab that rises on 4 shards ----
     // enter frame (decorative)
@@ -2328,7 +2328,9 @@ const countdownHudEl=document.getElementById('countdownHud');
 
     // ---- demons (two). Loaded fresh on enter so each animates independently ----
     const demons=[]; // {root,mixer,clips,cur,pos,wanderAng,wanderUntil,stuck,light}
-    const DSPAWN=[{x:-8,z:zw(11.3)},{x:6,z:zw(11.3)}];
+    // player enters top-right; spawn both demons at the diagonally-opposite
+    // bottom-left corner (open perimeter strip) so they start as far away as possible.
+    const DSPAWN=[{x:-15,z:zw(-11.4)},{x:-6,z:zw(-11.4)}];
     let demonsLoading=false;
     function loadDemons(){
       if(demons.length||demonsLoading||typeof THREE.GLTFLoader==='undefined') return;
@@ -2496,8 +2498,8 @@ const countdownHudEl=document.getElementById('countdownHud');
       currentLevel=2;
       grp.visible=true;
       // brighten the world
-      amb2.intensity=0.24; hemi2.intensity=0.22; sun2.intensity=0.0;
-      scene.fog.color.setHex(0xd6c9ae); scene.background.setHex(0xd6c9ae); scene.fog.density=0.026;
+      amb2.intensity=0.12; hemi2.intensity=0.11; sun2.intensity=0.0;
+      scene.fog.color.setHex(0xb9ac91); scene.background.setHex(0xb9ac91); scene.fog.density=0.034;
       // reset shard/exit/secret state visuals
       SHARDS.forEach((s,i)=>{ s.done=false; shardGrps[i].visible=!s.secret; });
       cubeHudEls2.forEach(e=>{ if(e) e.classList.remove('collected'); });
