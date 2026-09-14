@@ -1430,6 +1430,7 @@ const countdownHudEl=document.getElementById('countdownHud');
 
   function start(){
     if(mode==='play')return;
+    try{ renderer.toneMappingExposure=1.1; }catch(e){} // Level 1 uses full exposure
     loadDemon();
     introEl.classList.add('hidden'); endEl.classList.add('hidden'); pauseMenu.classList.add('hidden');
     mode='play'; objEl.textContent='Find the four shards — then the gate will show itself';
@@ -2034,7 +2035,10 @@ const countdownHudEl=document.getElementById('countdownHud');
     throwLight.target.position.copy(camera.position).addScaledVector(fwd,9); throwLight.target.position.y-=1.5;
     throwLight.target.updateMatrixWorld();
     const flick=0.78+Math.sin(t*23)*0.06+Math.random()*0.16;
-    throwLight.intensity=3.0*flick; torchFill.intensity=1.8*flick;
+    // Level 2's pale rooms are already lit — a full-strength cave torch blows the
+    // white walls out, so knock the held torch way down there.
+    const _thr=currentLevel===2?0.55:3.0, _fil=currentLevel===2?0.35:1.8;
+    throwLight.intensity=_thr*flick; torchFill.intensity=_fil*flick;
     torchFill.position.copy(camera.position).addScaledVector(fwd,0.6); torchFill.position.y-=0.2;
 
     // wall torches / caged bulbs flicker
@@ -2500,6 +2504,7 @@ const countdownHudEl=document.getElementById('countdownHud');
       // brighten the world
       amb2.intensity=0.12; hemi2.intensity=0.11; sun2.intensity=0.0;
       scene.fog.color.setHex(0xb9ac91); scene.background.setHex(0xb9ac91); scene.fog.density=0.034;
+      try{ renderer.toneMappingExposure=0.85; }catch(e){}
       // reset shard/exit/secret state visuals
       SHARDS.forEach((s,i)=>{ s.done=false; shardGrps[i].visible=!s.secret; });
       cubeHudEls2.forEach(e=>{ if(e) e.classList.remove('collected'); });
