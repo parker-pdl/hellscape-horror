@@ -2038,7 +2038,7 @@ const countdownHudEl=document.getElementById('countdownHud');
     const flick=0.78+Math.sin(t*23)*0.06+Math.random()*0.16;
     // Level 2's pale rooms are already lit — a full-strength cave torch blows the
     // white walls out, so knock the held torch way down there.
-    const _thr=currentLevel===3?1.1:currentLevel===2?0.55:3.0, _fil=currentLevel===3?0.65:currentLevel===2?0.35:1.8;
+    const _thr=currentLevel===3?0.15:currentLevel===2?0.55:3.0, _fil=currentLevel===3?0.12:currentLevel===2?0.35:1.8;
     throwLight.intensity=_thr*flick; torchFill.intensity=_fil*flick;
     torchFill.position.copy(camera.position).addScaledVector(fwd,0.6); torchFill.position.y-=0.2;
 
@@ -2711,8 +2711,9 @@ const countdownHudEl=document.getElementById('countdownHud');
     let exitDone=false;
     function enter(t){
       currentLevel=3; grp.visible=true;
-      amb3.intensity=0.34; hemi3.intensity=0.52; moon3.intensity=0.35;
-      scene.fog.color.setHex(0x6b7178); scene.background.setHex(0x565c64); scene.fog.density=0.028;
+      // overcast daylight carries the scene (no bright held torch outdoors)
+      amb3.intensity=0.42; hemi3.intensity=0.74; moon3.intensity=0.4;
+      scene.fog.color.setHex(0x6b7178); scene.background.setHex(0x565c64); scene.fog.density=0.024;
       try{ renderer.toneMappingExposure=1.0; }catch(e){}
       lanterns.forEach(l=>l.intensity=0.9); exitLight.intensity=1.4;
       runDead=false; demonHits=0; lastHit=-99; exitDone=false;
