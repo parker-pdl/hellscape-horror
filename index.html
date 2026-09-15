@@ -1541,6 +1541,7 @@ const countdownHudEl=document.getElementById('countdownHud');
   // can never drift out of sync with the actual walkable geometry.
   function drawMinimap(){
     const cv=document.getElementById('minimapCanvas'), c2=cv.getContext('2d');
+    if(currentLevel===3){ L3.drawMinimap(cv,c2); return; }
     if(currentLevel===2){ L2.drawMinimap(cv,c2); return; }
     const W=cv.width,H=cv.height;
     c2.fillStyle='#0a0503'; c2.fillRect(0,0,W,H);
@@ -1963,9 +1964,9 @@ const countdownHudEl=document.getElementById('countdownHud');
       const sinY=Math.sin(player.yaw),cosY=Math.cos(player.yaw);
       const nx = player.x + (mx*cosY - mz*sinY)*sp;
       const nz = player.z + (-mx*sinY - mz*cosY)*sp;
-      const res = currentLevel===2 ? L2.resolve(nx,nz) : resolvePosition(nx,nz);
+      const res = currentLevel===3 ? L3.resolve(nx,nz) : currentLevel===2 ? L2.resolve(nx,nz) : resolvePosition(nx,nz);
       player.x=res.x; player.z=res.z; player.elev=res.y; curZone=res.zone;
-      if(currentLevel===2){ L2.update(dt,t); } else {
+      if(currentLevel===2){ L2.update(dt,t); } else if(currentLevel===3){ L3.update(dt,t); } else {
       // the far wall of the hall is just a wall now — nudge back, run goes on
       if(curZone==='hall' && player.z<ZEND+2.7){
         player.z=ZEND+3.2;
@@ -2037,7 +2038,7 @@ const countdownHudEl=document.getElementById('countdownHud');
     const flick=0.78+Math.sin(t*23)*0.06+Math.random()*0.16;
     // Level 2's pale rooms are already lit — a full-strength cave torch blows the
     // white walls out, so knock the held torch way down there.
-    const _thr=currentLevel===2?0.55:3.0, _fil=currentLevel===2?0.35:1.8;
+    const _thr=currentLevel===3?1.1:currentLevel===2?0.55:3.0, _fil=currentLevel===3?0.65:currentLevel===2?0.35:1.8;
     throwLight.intensity=_thr*flick; torchFill.intensity=_fil*flick;
     torchFill.position.copy(camera.position).addScaledVector(fwd,0.6); torchFill.position.y-=0.2;
 
@@ -2132,8 +2133,9 @@ const countdownHudEl=document.getElementById('countdownHud');
 
   // reveal after first render
   requestAnimationFrame(()=>{ animate(); setTimeout(()=>{loadwrap.style.opacity=0;setTimeout(()=>loadwrap.style.display='none',600);},250); });
-  // preview shortcut: open the page with #l2 to jump straight into Level 2
+  // preview shortcut: open the page with #l2 / #l3 to jump straight into that level
   if(location.hash==='#l2'){ setTimeout(()=>{ try{ introEl.classList.add('hidden'); mode='play'; L2.enter(clock.elapsedTime); }catch(e){} }, 1200); }
+  if(location.hash==='#l3'){ setTimeout(()=>{ try{ introEl.classList.add('hidden'); mode='play'; L3.enter(clock.elapsedTime); }catch(e){} }, 1200); }
   // ================================================================
   //  LEVEL 2 — "THE PALE HALLS"
   //  A brighter, white/off-white level with a tan wood-plank floor.
@@ -2455,9 +2457,9 @@ const countdownHudEl=document.getElementById('countdownHud');
       }
       // reached the open exit (walked out through the west-wall gap)
       if(exitOpen && player.x < -BX+0.4 && player.z>zw(EXIT_Z0)-0.6 && player.z<zw(EXIT_Z1)+0.6){
-        currentLevel=0; // stop further updates
+        grp.visible=false; // hide the pale halls
         for(const d of demons){ d.root.visible=false; d.light.visible=false; }
-        endGame('LEVEL 3 — COMING SOON','you pass through the pale halls… the descent continues');
+        L3.enter(t); // seamless descent into the labyrinth
       }
       // demons
       for(const d of demons) updateDemon(d,dt,t);
@@ -2561,7 +2563,237 @@ const countdownHudEl=document.getElementById('countdownHud');
     return { enter, resolve, update, drawMinimap, _walls:walls, _SHARDS:SHARDS, get z0(){return Z0;} };
   })();
 
-  window.__HELL={start:()=>start(), enterL2:()=>{ mode='play'; L2.enter(clock.elapsedTime); }, level:()=>currentLevel, dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}},
+  // =================== LEVEL 3 — "THE HEDGE LABYRINTH" (scaffold) ===================
+  // Outdoors under a dreary overcast sky. A circular hedge maze: concentric rings,
+  // each with one gap, the gaps rotating so the only path spirals from the CENTER
+  // out to the EDGE, where the exit waits. Several larger, red-lit demons hunt from
+  // the far rings. Collision is analytic/radial (exact for rings) — cheap and solid.
+  const L3=(function(){
+    const Z0=2000;                       // its own world region (well clear of L1/L2)
+    const zw = lz => lz + Z0;
+    const H3=6.5, PR=0.34;
+    const CX=0, CZ=zw(0);                // labyrinth center in world coords
+    const grp=new THREE.Group(); grp.visible=false; scene.add(grp);
+
+    // ---- lights (own set, dark until enter) ----
+    const amb3 =new THREE.AmbientLight(0x8b93a0, 0.0); scene.add(amb3);
+    const hemi3=new THREE.HemisphereLight(0x9aa4b2, 0x23271f, 0.0); scene.add(hemi3);
+    const moon3=new THREE.DirectionalLight(0x9fb0c4, 0.0); moon3.position.set(-30,50,15); scene.add(moon3);
+
+    // ---- procedural textures ----
+    function grassTex(){
+      const s=256,c=document.createElement('canvas');c.width=c.height=s;const x=c.getContext('2d');
+      x.fillStyle='#39422e';x.fillRect(0,0,s,s);
+      for(let i=0;i<9000;i++){const g=40+Math.random()*40|0;x.fillStyle='rgba('+((g*0.7)|0)+','+g+','+((g*0.6)|0)+','+(0.1+Math.random()*0.2).toFixed(2)+')';
+        x.fillRect(Math.random()*s,Math.random()*s,1,1+Math.random()*2);}
+      const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(8,8);return t;
+    }
+    function hedgeTex(){
+      const s=128,c=document.createElement('canvas');c.width=c.height=s;const x=c.getContext('2d');
+      x.fillStyle='#26331f';x.fillRect(0,0,s,s);
+      for(let i=0;i<2600;i++){const g=30+Math.random()*45|0;x.fillStyle='rgba('+((g*0.6)|0)+','+g+','+((g*0.5)|0)+','+(0.2+Math.random()*0.3).toFixed(2)+')';
+        const r=1+Math.random()*2.5;x.beginPath();x.arc(Math.random()*s,Math.random()*s,r,0,Math.PI*2);x.fill();}
+      const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,1);return t;
+    }
+    const grassMat=new THREE.MeshStandardMaterial({map:grassTex(),color:0x424b36,roughness:1,metalness:0});
+    const hedgeMat=new THREE.MeshStandardMaterial({map:hedgeTex(),color:0x33422a,roughness:1,metalness:0});
+    const trunkMat=new THREE.MeshStandardMaterial({color:0x3a2c1c,roughness:1});
+    const foliageMat=new THREE.MeshStandardMaterial({color:0x2b3a24,roughness:1});
+
+    // ---- ground + sky dome ----
+    const ground=new THREE.Mesh(new THREE.CircleGeometry(62,64),grassMat);
+    ground.rotation.x=-Math.PI/2; ground.position.set(CX,0,CZ); ground.receiveShadow=true; grp.add(ground);
+    const sky=new THREE.Mesh(new THREE.SphereGeometry(120,32,20),
+      new THREE.MeshBasicMaterial({color:0x565c64,side:THREE.BackSide,fog:false}));
+    sky.position.set(CX,0,CZ); grp.add(sky);
+
+    // ---- circular labyrinth: analytic rings + hedge visuals drawn as tangent boxes ----
+    const RINGS=[7,12,17,22,27];
+    const TH=1.0;                          // hedge thickness
+    const GAP_HALF=0.20;                   // gap half-angle (radians)
+    const rings=[];                        // {R, gap, gapHalf, th}
+    RINGS.forEach((R,ri)=>{
+      const gap = ri*(Math.PI*2/RINGS.length) + 0.3;   // rotate the opening each ring => spiral
+      rings.push({R, gap, gapHalf:GAP_HALF, th:TH});
+      const segLen=1.7, n=Math.max(24,Math.round(2*Math.PI*R/segLen));
+      for(let i=0;i<n;i++){
+        const a=(i+0.5)/n*Math.PI*2;
+        const d=Math.atan2(Math.sin(a-gap),Math.cos(a-gap));
+        if(Math.abs(d)<GAP_HALF) continue;             // leave the opening
+        const wx=CX+Math.cos(a)*R, wz=CZ+Math.sin(a)*R;
+        const box=new THREE.Mesh(new THREE.BoxGeometry(TH,H3,segLen+0.35),hedgeMat);
+        box.position.set(wx,H3/2,wz); box.rotation.y=-a; box.castShadow=true; box.receiveShadow=true; grp.add(box);
+      }
+    });
+
+    // ---- scatter trees & bushes between rings (visual only; the rings do the blocking) ----
+    function tree(wx,wz,sc){
+      const g=new THREE.Group();
+      const tr=new THREE.Mesh(new THREE.CylinderGeometry(0.18*sc,0.28*sc,2.4*sc,6),trunkMat);
+      tr.position.y=1.2*sc; tr.castShadow=true; g.add(tr);
+      for(let k=0;k<3;k++){ const f=new THREE.Mesh(new THREE.SphereGeometry((1.0-k*0.18)*sc,7,6),foliageMat);
+        f.position.y=(2.2+k*0.7)*sc; f.castShadow=true; g.add(f); }
+      g.position.set(wx,0,wz); grp.add(g);
+    }
+    function bush(wx,wz,sc){ const b=new THREE.Mesh(new THREE.SphereGeometry(0.7*sc,7,6),foliageMat);
+      b.position.set(wx,0.5*sc,wz); b.scale.y=0.7; b.castShadow=true; grp.add(b); }
+    for(let ri=0;ri<RINGS.length-1;ri++){
+      const rmid=(RINGS[ri]+RINGS[ri+1])/2, count=6+ri*2;
+      for(let k=0;k<count;k++){ const a=Math.random()*Math.PI*2, rr=rmid+(Math.random()-0.5)*2.2;
+        const wx=CX+Math.cos(a)*rr, wz=CZ+Math.sin(a)*rr;
+        if(Math.random()<0.5) tree(wx,wz,0.7+Math.random()*0.5); else bush(wx,wz,0.8+Math.random()*0.6); }
+    }
+
+    // ---- lanterns on posts near each gap: dreary pools of light marking the way ----
+    const lanterns=[];
+    RINGS.forEach((R,ri)=>{ const a=rings[ri].gap;
+      const wx=CX+Math.cos(a)*(R-2.2), wz=CZ+Math.sin(a)*(R-2.2);
+      const pl=new THREE.PointLight(0xffcf8a,0.0,11,2); pl.position.set(wx,3.2,wz); grp.add(pl); lanterns.push(pl);
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.1,3.2,6),trunkMat); post.position.set(wx,1.6,wz); grp.add(post);
+    });
+
+    // ---- exit portal beyond the outer ring (aligned with the outer gap) ----
+    const EXIT_ANG=rings[rings.length-1].gap, EXIT_R=RINGS[RINGS.length-1]+5;
+    const exitPos={x:CX+Math.cos(EXIT_ANG)*EXIT_R, z:CZ+Math.sin(EXIT_ANG)*EXIT_R};
+    const exitLight=new THREE.PointLight(0x8affa0,0.0,15,2); exitLight.position.set(exitPos.x,3,exitPos.z); grp.add(exitLight);
+    const exitGate=new THREE.Mesh(new THREE.TorusGeometry(2.2,0.32,10,24),
+      new THREE.MeshStandardMaterial({color:0x1e2a18,emissive:0x123a1a,emissiveIntensity:0.8,roughness:0.6}));
+    exitGate.position.set(exitPos.x,2.4,exitPos.z); exitGate.rotation.y=-EXIT_ANG+Math.PI/2; grp.add(exitGate);
+
+    // ---- demons: a different, larger, red-lit type; several, spawning far from center ----
+    const demons=[]; let demonsLoading=false; const DCOUNT=3;
+    const dSpawn=[];
+    for(let i=0;i<DCOUNT;i++){ const a=rings[rings.length-1].gap+Math.PI+(i-1)*0.9, rr=RINGS[RINGS.length-1]-2.5;
+      dSpawn.push({x:CX+Math.cos(a)*rr, z:CZ+Math.sin(a)*rr}); }
+    function loadDemons(){
+      if(demons.length||demonsLoading||typeof THREE.GLTFLoader==='undefined') return;
+      demonsLoading=true;
+      for(let i=0;i<DCOUNT;i++){
+        new THREE.GLTFLoader().load('./demon.glb', gl=>{
+          const root=gl.scene; root.scale.setScalar(1.5);            // bigger "type"
+          root.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.frustumCulled=false;} });
+          const mixer=new THREE.AnimationMixer(root); const clips={};
+          for(const c of gl.animations) clips[c.name]=mixer.clipAction(c);
+          const light=new THREE.PointLight(0xff1e0a,1.3,9,2);
+          scene.add(root); scene.add(light);
+          const sp=dSpawn[i%dSpawn.length];
+          const dem={root,mixer,clips,cur:null,pos:{x:sp.x,z:sp.z,y:0},light};
+          root.position.set(sp.x,0,sp.z); root.visible=(currentLevel===3); light.visible=(currentLevel===3);
+          demons.push(dem); demPlay(dem,'Orc_Idle');
+        }, undefined, ()=>{});
+      }
+    }
+    function demPlay(dem,name,fade){ const a=dem.clips[name]||dem.clips['Idle']||Object.values(dem.clips)[0];
+      if(!a||dem.cur===a) return; if(dem.cur) dem.cur.fadeOut(fade||0.2); a.reset().fadeIn(fade||0.2).play(); dem.cur=a; }
+    const DSPEED=2.5, DHITDIST=1.5, DHIT_CD=1.1, DHITS_DIE=3;
+    let demonHits=0, lastHit=-99, runDead=false;
+
+    // ---- radial collision: hold the player on their side of each ring band unless
+    //      they are within that ring's angular gap (the only way outward) ----
+    function resolve(nx,nz){
+      let x=nx-CX, z=nz-CZ, r=Math.hypot(x,z);
+      if(r>0.001){
+        const ang=Math.atan2(z,x);
+        for(const ring of rings){
+          const band=ring.th/2+PR;
+          if(Math.abs(r-ring.R)<band){
+            const d=Math.atan2(Math.sin(ang-ring.gap),Math.cos(ang-ring.gap));
+            if(Math.abs(d)>ring.gapHalf-0.02){
+              const targetR=(r>=ring.R)?ring.R+band:ring.R-band, s=targetR/r; x*=s; z*=s; r=targetR;
+            }
+          }
+        }
+        const RMAX=RINGS[RINGS.length-1]+9; if(r>RMAX){ const s=RMAX/r; x*=s; z*=s; }
+      }
+      return {x:x+CX, z:z+CZ, y:0, zone:'level3'};
+    }
+
+    let exitDone=false;
+    function enter(t){
+      currentLevel=3; grp.visible=true;
+      amb3.intensity=0.34; hemi3.intensity=0.52; moon3.intensity=0.35;
+      scene.fog.color.setHex(0x6b7178); scene.background.setHex(0x565c64); scene.fog.density=0.028;
+      try{ renderer.toneMappingExposure=1.0; }catch(e){}
+      lanterns.forEach(l=>l.intensity=0.9); exitLight.intensity=1.4;
+      runDead=false; demonHits=0; lastHit=-99; exitDone=false;
+      demonHudEl.classList.add('active'); demonHudEl.classList.remove('danger');
+      demonLifeEls.forEach(e=>e.classList.remove('lost'));
+      loadDemons();
+      demons.forEach((d,i)=>{ const sp=dSpawn[i%dSpawn.length]; d.pos={x:sp.x,z:sp.z,y:0}; d.root.position.set(sp.x,0,sp.z); d.root.visible=true; d.light.visible=true; });
+      player.x=CX; player.z=CZ; player.yaw=0; player.pitch=0; player.elev=0; player.vy=0; player.airY=0; player.grounded=true;
+      curZone='level3'; mode='play';
+      objEl.textContent='LEVEL 3 — escape the labyrinth. The demons hunt.';
+      let f=document.getElementById('l3flash');
+      if(!f){ f=document.createElement('div'); f.id='l3flash';
+        f.style.cssText='position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;pointer-events:none;background:radial-gradient(circle,rgba(20,26,30,0),rgba(10,14,18,.9));transition:opacity 1.4s;';
+        f.innerHTML='<div style="font-family:Cinzel,serif;font-weight:800;letter-spacing:.28em;font-size:min(13vw,120px);color:#aeb8c4;text-shadow:0 2px 30px rgba(0,0,0,.9)">LEVEL&nbsp;3</div>';
+        document.body.appendChild(f); }
+      f.style.opacity='1'; f.style.display='flex';
+      setTimeout(()=>{ f.style.opacity='0'; setTimeout(()=>{ f.style.display='none'; },1500); },1400);
+      if(!isTouch){ try{canvas.requestPointerLock();}catch(e){} }
+    }
+
+    function hitPlayer(t){
+      demonHits++; lastHit=t;
+      for(let i=0;i<demonLifeEls.length;i++) demonLifeEls[i].classList.toggle('lost', i<demonHits);
+      if(demonHits>=DHITS_DIE){ runDead=true; demonHudEl.classList.remove('danger');
+        endGame('THE LABYRINTH TAKES YOU','the hedges close in — the demons drag you under'); return; }
+      demonHudEl.classList.add('danger');
+      hudEl.textContent=demonHits===1?'it caught you. run.':'one more and you are lost'; hudEl.style.opacity=1; setTimeout(()=>{hudEl.style.opacity=0;},2500);
+    }
+    function updateDemon(dem,dt,t){
+      if(!dem.root||runDead) return;
+      const dx=player.x-dem.pos.x, dz=player.z-dem.pos.z, dist=Math.hypot(dx,dz)||1;
+      if(dist<DHITDIST){ if(t-lastHit>DHIT_CD) hitPlayer(t); demPlay(dem,'Orc_Attack'); }
+      else{
+        const step=DSPEED*dt, tx=dem.pos.x+dx/dist*step, tz=dem.pos.z+dz/dist*step;
+        const r=resolve(tx,tz), moved=Math.hypot(r.x-dem.pos.x,r.z-dem.pos.z)>step*0.3;
+        dem.pos.x=r.x; dem.pos.z=r.z;
+        if(!moved){ // slide tangentially when a hedge blocks the straight line
+          const rr=Math.hypot(dem.pos.x-CX,dem.pos.z-CZ)||1;
+          const ang=Math.atan2(dem.pos.z-CZ,dem.pos.x-CX)+(Math.random()<0.5?1:-1)*dt*3;
+          const r2=resolve(CX+Math.cos(ang)*rr, CZ+Math.sin(ang)*rr); dem.pos.x=r2.x; dem.pos.z=r2.z;
+        }
+        demPlay(dem,'Orc_Walk');
+      }
+      dem.root.position.set(dem.pos.x,0,dem.pos.z);
+      dem.root.rotation.y=Math.atan2(player.x-dem.pos.x, player.z-dem.pos.z);
+      dem.light.position.set(dem.pos.x,2.2,dem.pos.z);
+      if(dem.mixer) dem.mixer.update(dt);
+    }
+
+    function update(dt,t){
+      if(exitDone) return;
+      if(Math.hypot(player.x-exitPos.x, player.z-exitPos.z)<2.4){
+        exitDone=true; currentLevel=0;
+        for(const d of demons){ if(d.root)d.root.visible=false; if(d.light)d.light.visible=false; }
+        endGame('YOU ESCAPED THE DARK','three descents survived — grey daylight breaks over the hedges. THE END… for now.');
+        return;
+      }
+      for(const d of demons) updateDemon(d,dt,t);
+      const fl=0.8+Math.sin(t*3)*0.15; lanterns.forEach(l=>l.intensity=0.9*fl);
+      exitLight.intensity=1.4+Math.sin(t*4)*0.5; exitGate.rotation.z=t*0.3;
+    }
+
+    function drawMinimap(cv,c2){
+      const W=cv.width,H=cv.height; c2.fillStyle='#0f1410'; c2.fillRect(0,0,W,H);
+      const RMAX=RINGS[RINGS.length-1]+8, pad=14, sc=Math.min(W-pad*2,H-pad*2)/(RMAX*2), ox=W/2, oy=H/2;
+      const P=(wx,wz)=>[ox+(wx-CX)*sc, oy+(wz-CZ)*sc];
+      c2.strokeStyle='rgba(120,200,120,.5)'; c2.lineWidth=2;
+      for(const ring of rings){ c2.beginPath(); c2.arc(ox,oy,ring.R*sc, ring.gap+ring.gapHalf, ring.gap-ring.gapHalf+Math.PI*2); c2.stroke(); }
+      const ep=P(exitPos.x,exitPos.z); c2.fillStyle='rgba(120,255,140,.95)'; c2.beginPath(); c2.arc(ep[0],ep[1],5,0,Math.PI*2); c2.fill();
+      c2.fillStyle='#cfe9cf'; c2.font='bold 8px monospace'; c2.textAlign='center'; c2.fillText('EXIT',ep[0],ep[1]-8);
+      c2.fillStyle='rgba(255,60,30,.95)';
+      for(const d of demons){ const p=P(d.pos.x,d.pos.z); c2.beginPath(); c2.arc(p[0],p[1],4,0,Math.PI*2); c2.fill(); }
+      const pp=P(player.x,player.z), fx=-Math.sin(player.yaw), fz=-Math.cos(player.yaw);
+      c2.strokeStyle='#dfe'; c2.lineWidth=2.5; c2.beginPath(); c2.moveTo(pp[0],pp[1]); c2.lineTo(pp[0]+fx*14,pp[1]+fz*14); c2.stroke();
+      c2.fillStyle='#bfe'; c2.beginPath(); c2.arc(pp[0],pp[1],5,0,Math.PI*2); c2.fill();
+    }
+
+    return { enter, resolve, update, drawMinimap, exitPos, get z0(){return Z0;} };
+  })();
+
+  window.__HELL={start:()=>start(), enterL2:()=>{ mode='play'; L2.enter(clock.elapsedTime); }, enterL3:()=>{ mode='play'; L3.enter(clock.elapsedTime); }, level:()=>currentLevel, dbg:()=>{try{renderer.shadowMap.enabled=false;throwLight.castShadow=false;renderer.setPixelRatio(1);scene.traverse(o=>{if(o.material)o.material.needsUpdate=true;});}catch(e){}},
     state:()=>({x:player.x,z:player.z,elev:player.elev,zone:curZone,mode:mode,yaw:player.yaw,pitch:player.pitch}),
     teleport:(x,z)=>{player.x=x;player.z=z;},
     // testing helpers: list every registered zone's bounding rect/name so a
