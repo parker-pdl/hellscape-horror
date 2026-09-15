@@ -1,7 +1,7 @@
 /* Hellscape Horror — offline service worker */
-const CACHE = 'hellscape-v8';
+const CACHE = 'hellscape-v9';
 const ASSETS = [
-  './', './index.html', './three.min.js', './GLTFLoader.js', './demon.glb',
+  './', './index.html', './three.min.js', './GLTFLoader.js', './demon.glb', './demon2.glb',
   './manifest.webmanifest', './icon-192.png', './icon-512.png'
 ];
 

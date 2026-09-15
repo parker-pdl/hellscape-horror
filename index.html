@@ -2661,27 +2661,38 @@ const countdownHudEl=document.getElementById('countdownHud');
     exitGate.position.set(exitPos.x,2.4,exitPos.z); exitGate.rotation.y=-EXIT_ANG+Math.PI/2; grp.add(exitGate);
 
     // ---- demons: a different, larger, red-lit type; several, spawning far from center ----
-    const demons=[]; let demonsLoading=false; const DCOUNT=3;
+    const demons=[]; let demonsLoading=false;
+    // 3 demon types (the Ch10 Mixamo model), 2 of each = 6 hunters. Each type has its
+    // own walk animation, size, tint and glow so they read as distinct creatures.
+    const DTYPES=[
+      {name:'shambler', scale:1.85, speed:2.0, walk:'Zombie_Walk',  emissive:0x1a4a12, light:0x46ff2a},
+      {name:'mourner',  scale:1.55, speed:2.5, walk:'Sad_Walk',     emissive:0x4a1210, light:0xff3020},
+      {name:'stalker',  scale:1.72, speed:2.9, walk:'Holding_Walk', emissive:0x141c4a, light:0x4a72ff},
+    ];
+    const DCOUNT=6;
     const dSpawn=[];
-    for(let i=0;i<DCOUNT;i++){ const a=rings[rings.length-1].gap+Math.PI+(i-1)*0.9, rr=RINGS[RINGS.length-1]-2.5;
+    for(let i=0;i<DCOUNT;i++){ const a=rings[rings.length-1].gap+Math.PI+(i-2.5)*0.62, rr=RINGS[RINGS.length-1]-2.5;
       dSpawn.push({x:CX+Math.cos(a)*rr, z:CZ+Math.sin(a)*rr}); }
     function loadDemons(){
       if(demons.length||demonsLoading||typeof THREE.GLTFLoader==='undefined') return;
       demonsLoading=true;
-      for(let i=0;i<DCOUNT;i++){
-        new THREE.GLTFLoader().load('./demon.glb', gl=>{
-          const root=gl.scene; root.scale.setScalar(1.5);            // bigger "type"
-          root.traverse(o=>{ if(o.isMesh){o.castShadow=true;o.frustumCulled=false;} });
+      for(let i=0;i<DCOUNT;i++){ (function(idx){
+        const type=DTYPES[idx%DTYPES.length];
+        new THREE.GLTFLoader().load('./demon2.glb', gl=>{
+          const root=gl.scene; root.scale.setScalar(type.scale);
+          root.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.frustumCulled=false;
+            if(o.material){ const tint=m=>{ const c=m.clone(); if(c.emissive){c.emissive.setHex(type.emissive); c.emissiveIntensity=0.7;} return c; };
+              o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material); } } });
           const mixer=new THREE.AnimationMixer(root); const clips={};
           for(const c of gl.animations) clips[c.name]=mixer.clipAction(c);
-          const light=new THREE.PointLight(0xff1e0a,1.3,9,2);
+          const light=new THREE.PointLight(type.light,1.1,9,2);
           scene.add(root); scene.add(light);
-          const sp=dSpawn[i%dSpawn.length];
-          const dem={root,mixer,clips,cur:null,pos:{x:sp.x,z:sp.z,y:0},light};
+          const sp=dSpawn[idx%dSpawn.length];
+          const dem={root,mixer,clips,cur:null,pos:{x:sp.x,z:sp.z,y:0},light,walk:type.walk,speed:type.speed};
           root.position.set(sp.x,0,sp.z); root.visible=(currentLevel===3); light.visible=(currentLevel===3);
           demons.push(dem); demPlay(dem,'Orc_Idle');
         }, undefined, ()=>{});
-      }
+      })(i); }
     }
     function demPlay(dem,name,fade){ const a=dem.clips[name]||dem.clips['Idle']||Object.values(dem.clips)[0];
       if(!a||dem.cur===a) return; if(dem.cur) dem.cur.fadeOut(fade||0.2); a.reset().fadeIn(fade||0.2).play(); dem.cur=a; }
@@ -2745,9 +2756,9 @@ const countdownHudEl=document.getElementById('countdownHud');
     function updateDemon(dem,dt,t){
       if(!dem.root||runDead) return;
       const dx=player.x-dem.pos.x, dz=player.z-dem.pos.z, dist=Math.hypot(dx,dz)||1;
-      if(dist<DHITDIST){ if(t-lastHit>DHIT_CD) hitPlayer(t); demPlay(dem,'Orc_Attack'); }
+      if(dist<DHITDIST){ if(t-lastHit>DHIT_CD) hitPlayer(t); demPlay(dem,'Orc_Idle'); }
       else{
-        const step=DSPEED*dt, tx=dem.pos.x+dx/dist*step, tz=dem.pos.z+dz/dist*step;
+        const step=(dem.speed||DSPEED)*dt, tx=dem.pos.x+dx/dist*step, tz=dem.pos.z+dz/dist*step;
         const r=resolve(tx,tz), moved=Math.hypot(r.x-dem.pos.x,r.z-dem.pos.z)>step*0.3;
         dem.pos.x=r.x; dem.pos.z=r.z;
         if(!moved){ // slide tangentially when a hedge blocks the straight line
@@ -2755,7 +2766,7 @@ const countdownHudEl=document.getElementById('countdownHud');
           const ang=Math.atan2(dem.pos.z-CZ,dem.pos.x-CX)+(Math.random()<0.5?1:-1)*dt*3;
           const r2=resolve(CX+Math.cos(ang)*rr, CZ+Math.sin(ang)*rr); dem.pos.x=r2.x; dem.pos.z=r2.z;
         }
-        demPlay(dem,'Orc_Walk');
+        demPlay(dem,dem.walk);
       }
       dem.root.position.set(dem.pos.x,0,dem.pos.z);
       dem.root.rotation.y=Math.atan2(player.x-dem.pos.x, player.z-dem.pos.z);
